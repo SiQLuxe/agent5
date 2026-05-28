@@ -96,6 +96,9 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.isLoading = false
 		m.chatPanel.ScrollToBottom()
 
+	case tea.PasteMsg:
+		m.composer.AppendInput(msg.Content)
+
 	case tea.KeyMsg:
 		// Help panel: intercept all keys when visible
 		if m.showHelp {
