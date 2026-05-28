@@ -1,0 +1,20 @@
+# configs/config.toml
+
+[models.openai]
+api_key = "sk-494cb5ad2fd84e479e0438902b1755dc"
+base_url = "http://localhost:8080"
+default_model = "deepseek-pro"
+
+[models.deepseek]
+api_key = ""
+base_url = "https://api.deepseek.com"
+default_model = "deepseek-chat"
+
+[models.local]
+base_url = "http://localhost:11434"
+default_model = "llama3"
+
+default_client = "openai"
+theme = "dark"
+approval_mode = "manual"
+max_subagents = 3
