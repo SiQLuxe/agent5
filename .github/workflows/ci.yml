@@ -1,0 +1,60 @@
+name: CI
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Go
+      uses: actions/setup-go@v5
+      with:
+        go-version: '1.22'
+
+    - name: Build
+      run: go build -v ./...
+
+    - name: Test
+      run: go test -v ./...
+
+    - name: Lint
+      run: go fmt ./...
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/')
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Go
+      uses: actions/setup-go@v5
+      with:
+        go-version: '1.22'
+
+    - name: Build for Linux
+      run: GOOS=linux GOARCH=amd64 go build -o agent-tui-linux-amd64 ./cmd/agent
+
+    - name: Build for macOS
+      run: GOOS=darwin GOARCH=amd64 go build -o agent-tui-darwin-amd64 ./cmd/agent
+
+    - name: Build for Windows
+      run: GOOS=windows GOARCH=amd64 go build -o agent-tui-windows-amd64.exe ./cmd/agent
+
+    - name: Create Release
+      uses: softprops/action-gh-release@v2
+      with:
+        files: |
+          agent-tui-linux-amd64
+          agent-tui-darwin-amd64
+          agent-tui-windows-amd64.exe
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

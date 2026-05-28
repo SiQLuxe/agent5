@@ -1,0 +1,20 @@
+# configs/config.example.toml
+
+[models.openai]
+api_key = "your-openai-key-here"
+base_url = "https://api.openai.com/v1"
+default_model = "gpt-4"
+
+[models.deepseek]
+api_key = "your-deepseek-key-here"
+base_url = "https://api.deepseek.com"
+default_model = "deepseek-chat"
+
+[models.local]
+base_url = "http://localhost:11434"
+default_model = "llama3"
+
+default_client = "openai"
+theme = "dark"
+approval_mode = "manual"
+max_subagents = 3

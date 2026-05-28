@@ -1,0 +1,34 @@
+# 敏感配置文件
+configs/config.toml
+
+# 本地数据库
+*.db
+.history/*.db
+
+# 编译产物
+agent-tui
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+*.prof
+
+# Go
+vendor/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Superpowers brainstorm temp files
+.superpowers/
