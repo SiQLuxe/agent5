@@ -94,6 +94,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.tabDock.UpdateTabLabel(m.activeSession, session.GenerateLabel())
 		}
 		m.isLoading = false
+		m.chatPanel.ScrollToBottom()
 
 	case tea.KeyMsg:
 		// Help panel: intercept all keys when visible
@@ -157,6 +158,14 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.switchToSession(7)
 		case "alt+9":
 			m.switchToSession(8)
+		case "pgup":
+			m.chatPanel.ScrollUp(m.chatPanel.height / 2)
+		case "pgdown":
+			m.chatPanel.ScrollDown(m.chatPanel.height / 2)
+		case "ctrl+up":
+			m.chatPanel.ScrollUp(1)
+		case "ctrl+down":
+			m.chatPanel.ScrollDown(1)
 		case "enter":
 			return m, m.submitMessageAsync()
 		case "backspace":
@@ -250,6 +259,7 @@ func (m *Model) submitMessageAsync() tea.Cmd {
 
 		// TODO: connect to actual AI backend
 		m.isLoading = false
+		m.chatPanel.ScrollToBottom()
 		return ChatResponseMsg{Content: fmt.Sprintf("Echo: %s", input)}
 	}
 }
@@ -260,8 +270,8 @@ func (m *Model) View() tea.View {
 	tabContent := m.tabDock.View()
 
 	chatHeight := m.height - 4
-	if chatHeight < 1 {
-		chatHeight = 1
+	if chatHeight < 2 {
+		chatHeight = 2
 	}
 	m.chatPanel.SetSize(m.width, chatHeight)
 	chatContent := m.chatPanel.View()
@@ -272,7 +282,9 @@ func (m *Model) View() tea.View {
 		result = m.renderHelpOverlay(result)
 	}
 
-	return tea.NewView(result)
+	v := tea.NewView(result)
+	v.AltScreen = true
+	return v
 }
 
 func (m *Model) renderHelpOverlay(underlying string) string {
@@ -357,6 +369,9 @@ func (m *Model) buildHelpPanel() string {
 	rows = append(rows, formatHelpRow(keyStyle, descStyle, "⌥N / ⌥→", "下一会话"))
 	rows = append(rows, formatHelpRow(keyStyle, descStyle, "⌥P / ⌥←", "上一会话"))
 	rows = append(rows, formatHelpRow(keyStyle, descStyle, "⌥1~9", "跳转到第N个会话"))
+	rows = append(rows, dividerStyle.Render("─────────────────────"))
+	rows = append(rows, formatHelpRow(keyStyle, descStyle, "PgUp / PgDn", "滚动对话（半页）"))
+	rows = append(rows, formatHelpRow(keyStyle, descStyle, "⌃↑ / ⌃↓", "滚动对话（逐行）"))
 	rows = append(rows, dividerStyle.Render("─────────────────────"))
 	rows = append(rows, formatHelpRow(keyStyle, descStyle, "Enter", "发送消息"))
 	rows = append(rows, formatHelpRow(keyStyle, descStyle, "⌫", "删除字符"))

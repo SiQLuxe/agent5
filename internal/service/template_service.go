@@ -17,22 +17,22 @@ var Templates = []MessageTemplate{
 	{
 		Name:        "code_response",
 		Description: "代码回复模板",
-		Format: "📝 **代码**:\n```\n{{code}}\n```\n\n💡 **解释**: {{explanation}}\n\n📋 **使用建议**: {{suggestion}}",
+		Format: "**代码**:\n```\n{{code}}\n```\n\n**解释**: {{explanation}}\n\n**使用建议**: {{suggestion}}",
 	},
 	{
 		Name:        "simple_response",
 		Description: "简单回复模板",
-		Format: "✅ **回答**: {{answer}}\n\n💡 **建议**: {{suggestion}}\n\n📌 **后续步骤**: {{next_steps}}",
+		Format: "**回答**: {{answer}}\n\n**建议**: {{suggestion}}\n\n**后续步骤**: {{next_steps}}",
 	},
 	{
 		Name:        "error_response",
 		Description: "错误响应模板",
-		Format: "❌ **错误**: {{error}}\n\n🔍 **原因**: {{reason}}\n\n🔧 **解决方案**: {{solution}}",
+		Format: "**错误**: {{error}}\n\n**原因**: {{reason}}\n\n**解决方案**: {{solution}}",
 	},
 	{
 		Name:        "list_response",
 		Description: "列表响应模板",
-		Format: "📋 **列表**:\n\n{{items}}\n\n💡 **总结**: {{summary}}",
+		Format: "**列表**:\n\n{{items}}\n\n**总结**: {{summary}}",
 	},
 }
 

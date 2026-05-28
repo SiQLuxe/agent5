@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/charmbracelet/lipgloss"
 	"github.com/example/agent-tui/internal/ui/syntax"
@@ -42,18 +43,20 @@ func DefaultChatPanelColors() ChatPanelColors {
 }
 
 type ChatPanel struct {
-	session *Session
-	width   int
-	height  int
-	colors  ChatPanelColors
+	session      *Session
+	width        int
+	height       int
+	colors       ChatPanelColors
+	scrollOffset int
 }
 
 func NewChatPanel(session *Session) *ChatPanel {
 	return &ChatPanel{
-		session: session,
-		width:   80,
-		height:  24,
-		colors:  DefaultChatPanelColors(),
+		session:      session,
+		width:        80,
+		height:       24,
+		colors:       DefaultChatPanelColors(),
+		scrollOffset: 0,
 	}
 }
 
@@ -72,6 +75,21 @@ func (cp *ChatPanel) SetColors(c ChatPanelColors) {
 func (cp *ChatPanel) SetSize(width, height int) {
 	cp.width = width
 	cp.height = height
+}
+
+func (cp *ChatPanel) ScrollUp(lines int) {
+	cp.scrollOffset -= lines
+	if cp.scrollOffset < 0 {
+		cp.scrollOffset = 0
+	}
+}
+
+func (cp *ChatPanel) ScrollDown(lines int) {
+	cp.scrollOffset += lines
+}
+
+func (cp *ChatPanel) ScrollToBottom() {
+	cp.scrollOffset = 999999
 }
 
 func (cp *ChatPanel) View() string {
@@ -95,24 +113,64 @@ func (cp *ChatPanel) View() string {
 		cp.renderMessage(&content, msg)
 	}
 
-	return style.Render(content.String())
+	rendered := content.String()
+	lines := strings.Split(rendered, "\n")
+
+	maxScroll := len(lines) - cp.height + 2
+	if maxScroll < 0 {
+		maxScroll = 0
+	}
+	if cp.scrollOffset > maxScroll {
+		cp.scrollOffset = maxScroll
+	}
+
+	start := cp.scrollOffset
+	end := start + cp.height - 2
+	if end < 0 {
+		end = 0
+	}
+	if end > len(lines) {
+		end = len(lines)
+	}
+	if start > end {
+		start = end
+	}
+
+	visibleLines := lines[start:end]
+	visibleContent := strings.Join(visibleLines, "\n")
+
+	return style.Render(visibleContent)
+}
+
+// hasCJK returns true if the string contains any CJK characters
+func hasCJK(s string) bool {
+	for _, r := range s {
+		if (r >= 0x4E00 && r <= 0x9FFF) || // CJK Unified
+			(r >= 0x3400 && r <= 0x4DBF) || // CJK Ext-A
+			(r >= 0x20000 && r <= 0x2A6DF) || // CJK Ext-B
+			(r >= 0xF900 && r <= 0xFAFF) || // CJK Compatibility
+			(r >= 0x3040 && r <= 0x309F) || // Hiragana
+			(r >= 0x30A0 && r <= 0x30FF) || // Katakana
+			(r >= 0xAC00 && r <= 0xD7AF) { // Hangul
+			return true
+		}
+	}
+	return false
 }
 
 func (cp *ChatPanel) renderMessage(sb *strings.Builder, msg Message) {
-	// Timestamp
 	ts := lipgloss.NewStyle().
 		Foreground(lipgloss.Color(cp.colors.Timestamp)).
 		Render(msg.Timestamp.Format("15:04"))
 
 	switch msg.Role {
 	case RoleUser:
-		// 👤 User badge with background
 		badge := lipgloss.NewStyle().
 			Background(lipgloss.Color(cp.colors.UserFg)).
 			Foreground(lipgloss.Color("#1e1e1e")).
 			Bold(true).
 			Padding(0, 1).
-			Render("👤")
+			Render("🗣️")
 		sb.WriteString(badge)
 		sb.WriteString(" ")
 		sb.WriteString(ts)
@@ -121,24 +179,22 @@ func (cp *ChatPanel) renderMessage(sb *strings.Builder, msg Message) {
 		textStyle := lipgloss.NewStyle().
 			Foreground(lipgloss.Color(cp.colors.Text)).
 			PaddingLeft(3)
-		highlighted := syntax.Highlight(msg.Content, "")
-		sb.WriteString(textStyle.Render(highlighted))
+		rendered := cp.highlightSafe(msg.Content)
+		sb.WriteString(textStyle.Render(rendered))
 		sb.WriteString("\n\n")
 
 	case RoleAssistant:
-		// 🤖 Luxe badge
 		badge := lipgloss.NewStyle().
 			Background(lipgloss.Color(cp.colors.AssistantBg)).
 			Foreground(lipgloss.Color(cp.colors.AssistantFg)).
 			Bold(true).
 			Padding(0, 1).
-			Render("🤖 Luxe")
+			Render("👾 玄")
 		sb.WriteString(badge)
 		sb.WriteString(" ")
 		sb.WriteString(ts)
 		sb.WriteString("\n")
 
-		// Thinking display
 		if msg.Thinking != nil {
 			cp.renderThinking(sb, msg.Thinking)
 		}
@@ -146,18 +202,17 @@ func (cp *ChatPanel) renderMessage(sb *strings.Builder, msg Message) {
 		textStyle := lipgloss.NewStyle().
 			Foreground(lipgloss.Color(cp.colors.Text)).
 			PaddingLeft(1)
-		highlighted := syntax.Highlight(msg.Content, "")
-		sb.WriteString(textStyle.Render(highlighted))
+		rendered := cp.highlightSafe(msg.Content)
+		sb.WriteString(textStyle.Render(rendered))
 		sb.WriteString("\n\n")
 
 	case RoleSystem:
-		// ⚙️ System badge
 		badge := lipgloss.NewStyle().
 			Background(lipgloss.Color(cp.colors.SystemBg)).
 			Foreground(lipgloss.Color(cp.colors.SystemFg)).
 			Bold(true).
 			Padding(0, 1).
-			Render("⚙️ System")
+			Render("⚙ sys")
 		sb.WriteString(badge)
 		sb.WriteString(" ")
 		sb.WriteString(ts)
@@ -171,13 +226,21 @@ func (cp *ChatPanel) renderMessage(sb *strings.Builder, msg Message) {
 	}
 }
 
+// highlightSafe applies syntax highlighting, skipping chroma for CJK text to avoid duplication
+func (cp *ChatPanel) highlightSafe(content string) string {
+	if hasCJK(content) {
+		return content
+	}
+	return syntax.Highlight(content, "")
+}
+
 func (cp *ChatPanel) renderThinking(sb *strings.Builder, t *Thinking) {
 	arrow := "▶"
 	if t.Expanded {
 		arrow = "▼"
 	}
 
-	charCount := len([]rune(t.Content))
+	charCount := utf8.RuneCountInString(t.Content)
 	durationStr := ""
 	if t.Duration > 0 {
 		durationStr = fmt.Sprintf(" · %.1fs", t.Duration.Seconds())
@@ -190,7 +253,6 @@ func (cp *ChatPanel) renderThinking(sb *strings.Builder, t *Thinking) {
 	sb.WriteString("\n")
 
 	if t.Expanded {
-		// Content area with yellow left border
 		contentStyle := lipgloss.NewStyle().
 			Background(lipgloss.Color(cp.colors.ThinkingBg)).
 			BorderLeft(true).

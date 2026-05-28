@@ -7,7 +7,7 @@ import (
 	"github.com/example/agent-tui/internal/service"
 	"github.com/example/agent-tui/internal/ui"
 
-	"charm.land/bubbletea/v2"
+	tea "charm.land/bubbletea/v2"
 )
 
 func main() {
