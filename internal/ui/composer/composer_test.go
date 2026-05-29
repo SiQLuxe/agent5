@@ -36,10 +36,12 @@ func TestClearInputEmpty(t *testing.T) {
 	}
 }
 
-func TestHeightBounds(t *testing.T) {
+func TestPromptDisplayed(t *testing.T) {
 	c := New()
-	h := c.GetFieldHeight()
-	if h == 0 || h > 8 {
-		t.Fatalf("expected height in [1,8], got %d", h)
+	if c.prompt == nil {
+		t.Fatal("expected non-nil prompt")
+	}
+	if c.prompt.GetText(false) != "> " {
+		t.Fatalf("expected prompt '> ', got %q", c.prompt.GetText(false))
 	}
 }
