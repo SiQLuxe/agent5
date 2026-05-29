@@ -3,6 +3,7 @@ package ui
 import (
 	"fmt"
 	"strings"
+	"time"
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/lipgloss"
@@ -20,8 +21,9 @@ const (
 )
 
 type ChatResponseMsg struct {
-	Content string
-	Error   error
+	UserInput string
+	Content   string
+	Error     error
 }
 
 type Model struct {
@@ -36,6 +38,8 @@ type Model struct {
 	themeService  *ThemeService
 	isLoading     bool
 	showHelp      bool
+	lastText      string
+	clearTime     time.Time
 }
 
 func NewModel() *Model {
@@ -84,8 +88,14 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.chatPanel.SetSize(msg.Width, chatHeight)
 
 	case ChatResponseMsg:
+		m.composer.ClearInput()
+		m.lastText = ""
+		m.clearTime = time.Now()
 		session := m.activeSessionPtr()
 		if session != nil {
+			if msg.UserInput != "" {
+				session.AddMessage(RoleUser, msg.UserInput)
+			}
 			if msg.Error != nil {
 				session.AddMessage(RoleSystem, "❌ Error: "+msg.Error.Error())
 			} else if msg.Content != "" {
@@ -99,7 +109,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.PasteMsg:
 		m.composer.AppendInput(msg.Content)
 
-	case tea.KeyMsg:
+	case tea.KeyPressMsg:
 		// Help panel: intercept all keys when visible
 		if m.showHelp {
 			m.showHelp = false
@@ -119,6 +129,11 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		// Printable characters: Key.Text is populated (space → " ")
 		if key.Text != "" {
+			if key.Text == m.lastText && time.Since(m.clearTime) < 100*time.Millisecond {
+				m.lastText = ""
+				return m, nil
+			}
+			m.lastText = key.Text
 			m.composer.AppendInput(key.Text)
 			return m, nil
 		}
@@ -186,15 +201,17 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.chatPanel.ScrollToTop()
 		case "ctrl+end":
 			m.chatPanel.ScrollToBottom()
-		case "g":
-			m.chatPanel.ScrollToTop()
-		case "G":
-			m.chatPanel.ScrollToBottom()
 		case "enter":
+			if strings.TrimSpace(m.composer.GetInput()) == "" {
+				return m, nil
+			}
+			m.isLoading = true
 			return m, m.submitMessageAsync()
 		case "backspace":
 			m.composer.Backspace()
 		}
+	case tea.KeyReleaseMsg:
+		return m, nil
 	}
 	return m, nil
 }
@@ -293,23 +310,11 @@ func (m *Model) switchToSession(index int) {
 
 func (m *Model) submitMessageAsync() tea.Cmd {
 	return func() tea.Msg {
-		input := strings.TrimSpace(m.composer.GetInput())
-		if input == "" {
-			return nil
+		input := m.composer.GetInput()
+		return ChatResponseMsg{
+			UserInput: input,
+			Content:   fmt.Sprintf("Echo: %s", input),
 		}
-
-		session := m.activeSessionPtr()
-		if session != nil {
-			session.AddMessage(RoleUser, input)
-			m.tabDock.UpdateTabLabel(m.activeSession, session.GenerateLabel())
-		}
-		m.composer.ClearInput()
-		m.isLoading = true
-
-		// TODO: connect to actual AI backend
-		m.isLoading = false
-		m.chatPanel.ScrollToBottom()
-		return ChatResponseMsg{Content: fmt.Sprintf("Echo: %s", input)}
 	}
 }
 

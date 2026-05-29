@@ -7,6 +7,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/charmbracelet/lipgloss"
+	"github.com/charmbracelet/x/ansi"
 	"github.com/example/agent-tui/internal/ui/syntax"
 )
 
@@ -302,13 +303,13 @@ func (cp *ChatPanel) View() string {
 	// Combine content + scrollbar
 	var result strings.Builder
 	for i, line := range visibleLines {
-		// Pad content to contentWidth
-		lineRunes := []rune(line)
+		// Pad content to contentWidth (CJK-aware)
+		lineWidth := lipgloss.Width(line)
 		padded := line
-		if len(lineRunes) < contentWidth {
-			padded = line + strings.Repeat(" ", contentWidth-len(lineRunes))
-		} else if len(lineRunes) > contentWidth {
-			padded = string(lineRunes[:contentWidth])
+		if lineWidth < contentWidth {
+			padded = line + strings.Repeat(" ", contentWidth-lineWidth)
+		} else if lineWidth > contentWidth {
+			padded = ansi.Truncate(line, contentWidth, "")
 		}
 		if i < len(scrollbar) {
 			result.WriteString(padded + scrollbar[i] + "\n")
