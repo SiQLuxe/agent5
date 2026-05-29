@@ -160,12 +160,12 @@ func TestSendMessage(t *testing.T) {
 		if msgs[0].Role != RoleUser || msgs[0].Content != "hello" {
 			t.Fatalf("unexpected first message: %+v", msgs[0])
 		}
-		if msgs[1].Role != RoleAssistant || msgs[1].Content != "" {
-			t.Fatalf("expected empty assistant placeholder, got: %+v", msgs[1])
+		if msgs[1].Role != RoleAssistant || msgs[1].Content != "Hello!" {
+			t.Fatalf("expected assistant response 'Hello!', got '%s'", msgs[1].Content)
 		}
 	}
-	if !a.IsLoading() {
-		t.Fatal("expected loading after send")
+	if a.IsLoading() {
+		t.Fatal("expected loading cleared after stream completes")
 	}
 }
 
@@ -241,6 +241,32 @@ func TestSetLoading(t *testing.T) {
 	a.SetLoading(true)
 	if !a.IsLoading() {
 		t.Fatal("expected loading after SetLoading(true)")
+	}
+}
+
+func TestSendMessageStreamsContent(t *testing.T) {
+	a := NewApp()
+	a.newSession()
+	h := history.NewHistory("")
+	mockClient := &MockAIClientForApp{
+		mockResponse: "Hello world",
+	}
+	aiAssistant := service.NewAIAssistant(mockClient, h)
+	a.SetAIAssistant(aiAssistant)
+
+	a.composer.SetInput("hi")
+	a.sendMessage()
+
+	s := a.activeSessionPtr()
+
+	if len(s.Messages) != 2 {
+		t.Fatalf("expected 2 messages, got %d", len(s.Messages))
+	}
+	if s.Messages[1].Content != "Hello world" {
+		t.Fatalf("expected streaming content 'Hello world', got '%s'", s.Messages[1].Content)
+	}
+	if a.IsLoading() {
+		t.Fatal("expected loading cleared after stream completes")
 	}
 }
 

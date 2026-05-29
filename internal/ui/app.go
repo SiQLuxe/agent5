@@ -347,11 +347,30 @@ func (a *App) sendMessage() {
 	if s == nil {
 		return
 	}
+
 	s.AddMessage(RoleUser, text)
 	s.AddMessage(RoleAssistant, "")
 	a.composer.ClearInput()
-	a.isLoading = true
 	a.chatPanel.SetSession(s)
+	a.isLoading = true
+
+	sessionID := s.ID
+	var fullResponse string
+	err := a.aiAssistant.ChatStream(sessionID, text, func(chunk string) {
+		fullResponse += chunk
+	})
+
+	if s := a.activeSessionPtr(); s != nil {
+		if len(s.Messages) > 0 {
+			s.Messages[len(s.Messages)-1].Content = fullResponse
+		}
+		if err != nil {
+			s.AddMessage(RoleSystem, "Error: "+err.Error())
+		}
+	}
+	a.isLoading = false
+	a.chatPanel.SetSession(a.activeSessionPtr())
+	a.chatPanel.ScrollToBottom()
 }
 
 func (a *App) AddWelcomeMessage() {
