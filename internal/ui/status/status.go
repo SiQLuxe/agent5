@@ -3,64 +3,49 @@ package status
 import (
 	"fmt"
 
-	"charm.land/lipgloss/v2"
+	"github.com/gdamore/tcell/v2"
+	"github.com/rivo/tview"
 )
 
 type StatusBar struct {
-	mode       string
-	status     string
-	taskCount  int
-	connection bool
+	*tview.TextView
+	mode      string
+	tasks     int
+	connected bool
 }
 
-func NewStatusBar() *StatusBar {
-	return &StatusBar{
-		mode:       "Chat",
-		status:     "Ready",
-		taskCount:  0,
-		connection: true,
+func New() *StatusBar {
+	s := &StatusBar{
+		TextView: tview.NewTextView(),
 	}
+	s.SetDynamicColors(true)
+	s.SetTextAlign(tview.AlignLeft)
+	return s
 }
 
-func (sb *StatusBar) SetMode(mode string) {
-	sb.mode = mode
+func (s *StatusBar) SetMode(mode string) {
+	s.mode = mode
+	s.refresh()
 }
 
-func (sb *StatusBar) SetStatus(status string) {
-	sb.status = status
+func (s *StatusBar) SetTasks(n int) {
+	s.tasks = n
+	s.refresh()
 }
 
-func (sb *StatusBar) SetTaskCount(count int) {
-	sb.taskCount = count
+func (s *StatusBar) SetConnected(v bool) {
+	s.connected = v
+	s.refresh()
 }
 
-func (sb *StatusBar) SetConnected(connected bool) {
-	sb.connection = connected
+func (s *StatusBar) SetBackgroundColor(color tcell.Color) {
+	s.TextView.SetBackgroundColor(color)
 }
 
-func (sb *StatusBar) View(width int) string {
-	style := lipgloss.NewStyle().
-		Width(width).
-		Height(1).
-		Background(lipgloss.Color("#252526")).
-		Padding(0, 2)
-
-	left := lipgloss.NewStyle().Foreground(lipgloss.Color("#569cd6")).Render("Agent TUI")
-	left += lipgloss.NewStyle().Foreground(lipgloss.Color("#858585")).Render(" | " + sb.mode)
-
-	connectionStatus := "Connected"
-	if !sb.connection {
-		connectionStatus = lipgloss.NewStyle().Foreground(lipgloss.Color("#f14c4c")).Render("Disconnected")
+func (s *StatusBar) refresh() {
+	connStr := "●"
+	if !s.connected {
+		connStr = "○"
 	}
-
-	right := lipgloss.NewStyle().Foreground(lipgloss.Color("#858585")).Render(fmt.Sprintf(
-		"Tasks: %d | Status: %s | %s",
-		sb.taskCount,
-		sb.status,
-		connectionStatus,
-	))
-
-	return style.Render(
-		lipgloss.JoinHorizontal(lipgloss.Left, left, right),
-	)
+	s.SetText(fmt.Sprintf("  %s  Mode: %s  Tasks: %d", connStr, s.mode, s.tasks))
 }

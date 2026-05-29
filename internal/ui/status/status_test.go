@@ -1,39 +1,58 @@
 package status
 
-import "testing"
+import (
+	"testing"
 
-func TestStatusBar_SetMode(t *testing.T) {
-	sb := NewStatusBar()
-	sb.SetMode("Chat")
+	"github.com/gdamore/tcell/v2"
+)
 
-	if sb.mode != "Chat" {
-		t.Errorf("Expected mode 'Chat', got '%s'", sb.mode)
+func TestNew(t *testing.T) {
+	s := New()
+	if s == nil {
+		t.Fatal("New() returned nil")
 	}
 }
 
-func TestStatusBar_SetConnected(t *testing.T) {
-	sb := NewStatusBar()
-	sb.SetConnected(false)
-
-	if sb.connection != false {
-		t.Error("Expected connection to be false")
+func TestSetMode(t *testing.T) {
+	s := New()
+	s.SetMode("chat")
+	if s.mode != "chat" {
+		t.Fatalf("expected mode 'chat', got %q", s.mode)
 	}
 }
 
-func TestStatusBar_SetTaskCount(t *testing.T) {
-	sb := NewStatusBar()
-	sb.SetTaskCount(5)
-
-	if sb.taskCount != 5 {
-		t.Errorf("Expected task count 5, got %d", sb.taskCount)
+func TestSetTasks(t *testing.T) {
+	s := New()
+	s.SetTasks(3)
+	if s.tasks != 3 {
+		t.Fatalf("expected tasks 3, got %d", s.tasks)
 	}
 }
 
-func TestStatusBar_View(t *testing.T) {
-	sb := NewStatusBar()
-	result := sb.View(80)
+func TestSetConnected(t *testing.T) {
+	s := New()
+	s.SetConnected(true)
+	if !s.connected {
+		t.Fatal("expected connected=true")
+	}
+	s.SetConnected(false)
+	if s.connected {
+		t.Fatal("expected connected=false after reset")
+	}
+}
 
-	if len(result) == 0 {
-		t.Error("Expected non-empty view")
+func TestSetBackgroundColor(t *testing.T) {
+	s := New()
+	s.SetBackgroundColor(tcell.ColorBlue)
+}
+
+func TestRefresh(t *testing.T) {
+	s := New()
+	s.SetMode("chat")
+	s.SetTasks(2)
+	s.SetConnected(true)
+	text := s.GetText(false)
+	if text == "" {
+		t.Fatal("expected non-empty text after refresh")
 	}
 }
