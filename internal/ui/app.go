@@ -373,3 +373,40 @@ func (a *App) SetLoading(v bool) {
 func (a *App) IsLoading() bool {
 	return a.isLoading
 }
+
+// AddChatMessage adds a message to the active session (for tests).
+func (a *App) AddChatMessage(role, content string) {
+	if s := a.activeSessionPtr(); s != nil {
+		var r Role
+		switch role {
+		case "user":
+			r = RoleUser
+		case "assistant":
+			r = RoleAssistant
+		case "system":
+			r = RoleSystem
+		default:
+			r = RoleUser
+		}
+		s.AddMessage(r, content)
+		a.chatPanel.SetSession(s)
+	}
+}
+
+// GetChatMessages returns all messages from the active session (for tests).
+func (a *App) GetChatMessages() []Message {
+	if s := a.activeSessionPtr(); s != nil {
+		return s.Messages
+	}
+	return nil
+}
+
+// SetComposerInput sets the composer input text (for tests).
+func (a *App) SetComposerInput(input string) {
+	a.composer.SetInput(input)
+}
+
+// GetComposerInput returns the composer input text (for tests).
+func (a *App) GetComposerInput() string {
+	return a.composer.GetInput()
+}

@@ -6,37 +6,35 @@ import (
 )
 
 func TestEndToEnd_ChatFlow(t *testing.T) {
-	// Create UI model
-	model := ui.NewModel()
-	
-	// Add message directly
-	model.AddChatMessage("user", "Hello")
-	
-	// Verify message was added
-	messages := model.GetChatMessages()
+	app := ui.NewApp()
+	app.AddWelcomeMessage()
+
+	app.AddChatMessage("user", "Hello")
+
+	messages := app.GetChatMessages()
 	if len(messages) < 1 {
 		t.Error("Expected at least 1 message")
 	}
 }
 
 func TestEndToEnd_MultipleMessages(t *testing.T) {
-	model := ui.NewModel()
-	
-	model.AddChatMessage("user", "First")
-	model.AddChatMessage("assistant", "Second")
-	
-	messages := model.GetChatMessages()
-	if len(messages) != 2 {
-		t.Errorf("Expected 2 messages, got %d", len(messages))
+	app := ui.NewApp()
+	app.AddWelcomeMessage()
+
+	app.AddChatMessage("user", "First")
+	app.AddChatMessage("assistant", "Second")
+
+	messages := app.GetChatMessages()
+	if len(messages) != 3 {
+		t.Errorf("Expected 3 messages, got %d", len(messages))
 	}
 }
 
 func TestEndToEnd_ComposerInput(t *testing.T) {
-	model := ui.NewModel()
-	
-	// Test composer input
-	model.SetComposerInput("Test input")
-	if model.GetComposerInput() != "Test input" {
-		t.Errorf("Expected 'Test input', got %s", model.GetComposerInput())
+	app := ui.NewApp()
+
+	app.SetComposerInput("Test input")
+	if app.GetComposerInput() != "Test input" {
+		t.Errorf("Expected 'Test input', got %s", app.GetComposerInput())
 	}
 }
