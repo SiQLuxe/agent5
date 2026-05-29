@@ -12,6 +12,11 @@ require (
 require (
 	charm.land/bubbles/v2 v2.1.0 // indirect
 	github.com/atotto/clipboard v0.1.4 // indirect
+	github.com/gdamore/encoding v1.0.1 // indirect
+	github.com/gdamore/tcell/v2 v2.8.1 // indirect
+	github.com/rivo/tview v0.42.0 // indirect
+	golang.org/x/term v0.28.0 // indirect
+	golang.org/x/text v0.21.0 // indirect
 )
 
 require (
