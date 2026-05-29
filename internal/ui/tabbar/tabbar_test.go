@@ -1,86 +1,111 @@
 package tabbar
 
-import "testing"
+import (
+	"testing"
 
-func TestTabDock_View(t *testing.T) {
-	tabs := []Tab{
-		{ID: "chat", Label: "Chat"},
-		{ID: "editor", Label: "Editor"},
-	}
-	td := NewTabDock(tabs)
-	result := td.View()
+	"github.com/gdamore/tcell/v2"
+)
 
-	if len(result) == 0 {
-		t.Error("Expected non-empty view")
+func TestNew(t *testing.T) {
+	tb := New()
+	if tb == nil {
+		t.Fatal("New() returned nil")
 	}
 }
 
-func TestTabDock_SetActiveTab(t *testing.T) {
-	tabs := []Tab{
-		{ID: "chat", Label: "Chat"},
-		{ID: "editor", Label: "Editor"},
-	}
-	td := NewTabDock(tabs)
-	td.SetActiveTab(1)
-
-	if td.GetActiveTab() != 1 {
-		t.Error("Expected active tab to be 1, got", td.GetActiveTab())
+func TestAddTab(t *testing.T) {
+	tb := New()
+	tb.AddTab(Tab{ID: "1", Label: "Session 1"})
+	tb.AddTab(Tab{ID: "2", Label: "Session 2"})
+	if tb.TabCount() != 2 {
+		t.Fatalf("expected 2 tabs, got %d", tb.TabCount())
 	}
 }
 
-func TestTabDock_GetTabID(t *testing.T) {
-	tabs := []Tab{
-		{ID: "chat", Label: "Chat"},
-		{ID: "editor", Label: "Editor"},
+func TestRemoveTab(t *testing.T) {
+	tb := New()
+	tb.AddTab(Tab{ID: "1", Label: "S1"})
+	tb.AddTab(Tab{ID: "2", Label: "S2"})
+	tb.RemoveTab(0)
+	if tb.TabCount() != 1 {
+		t.Fatalf("expected 1 tab after remove, got %d", tb.TabCount())
 	}
-	td := NewTabDock(tabs)
-	id, err := td.GetTabID(0)
-
-	if err != nil {
-		t.Error("Expected no error, got", err)
-	}
-	if id != "chat" {
-		t.Error("Expected chat, got", id)
+	if tb.tabs[0].ID != "2" {
+		t.Fatalf("expected remaining tab ID '2', got %q", tb.tabs[0].ID)
 	}
 }
 
-func TestTabDock_AddTab(t *testing.T) {
-	td := NewTabDock([]Tab{})
-	td.AddTab(Tab{ID: "s1", Label: "Session 1"})
-	if td.TabCount() != 1 {
-		t.Errorf("Expected 1 tab, got %d", td.TabCount())
+func TestRemoveTabOutOfRange(t *testing.T) {
+	tb := New()
+	tb.AddTab(Tab{ID: "1", Label: "S1"})
+	tb.RemoveTab(5)
+	if tb.TabCount() != 1 {
+		t.Fatalf("expected 1 tab, got %d", tb.TabCount())
+	}
+	tb.RemoveTab(-1)
+	if tb.TabCount() != 1 {
+		t.Fatalf("expected 1 tab, got %d", tb.TabCount())
 	}
 }
 
-func TestTabDock_RemoveTab(t *testing.T) {
-	td := NewTabDock([]Tab{
-		{ID: "s1", Label: "S1"},
-		{ID: "s2", Label: "S2"},
-	})
-	td.RemoveTab(0)
-	if td.TabCount() != 1 {
-		t.Errorf("Expected 1 tab, got %d", td.TabCount())
-	}
-	if td.ActiveTabID() != "s2" {
-		t.Errorf("Expected active 's2', got '%s'", td.ActiveTabID())
+func TestUpdateTab(t *testing.T) {
+	tb := New()
+	tb.AddTab(Tab{ID: "1", Label: "Old"})
+	tb.UpdateTab(0, "New")
+	if tb.tabs[0].Label != "New" {
+		t.Fatalf("expected label 'New', got %q", tb.tabs[0].Label)
 	}
 }
 
-func TestTabDock_UpdateTabLabel(t *testing.T) {
-	td := NewTabDock([]Tab{
-		{ID: "s1", Label: "Old"},
-	})
-	td.UpdateTabLabel(0, "New")
-	if td.tabs[0].Label != "New" {
-		t.Errorf("Expected 'New', got '%s'", td.tabs[0].Label)
+func TestUpdateTabOutOfRange(t *testing.T) {
+	tb := New()
+	tb.AddTab(Tab{ID: "1", Label: "S1"})
+	tb.UpdateTab(3, "X")
+	tb.UpdateTab(-1, "X")
+	if tb.tabs[0].Label != "S1" {
+		t.Fatalf("expected unchanged label 'S1', got %q", tb.tabs[0].Label)
 	}
 }
 
-func TestTabDock_ActiveTabID(t *testing.T) {
-	td := NewTabDock([]Tab{
-		{ID: "s1", Label: "S1"},
-	})
-	if td.ActiveTabID() != "s1" {
-		t.Errorf("Expected 's1', got '%s'", td.ActiveTabID())
+func TestSetActive(t *testing.T) {
+	tb := New()
+	tb.AddTab(Tab{ID: "1", Label: "S1"})
+	tb.AddTab(Tab{ID: "2", Label: "S2"})
+	tb.SetActive(1)
+	if tb.ActiveIndex() != 1 {
+		t.Fatalf("expected active index 1, got %d", tb.ActiveIndex())
+	}
+}
+
+func TestSetActiveOutOfRange(t *testing.T) {
+	tb := New()
+	tb.AddTab(Tab{ID: "1", Label: "S1"})
+	tb.SetActive(5)
+	tb.SetActive(-1)
+}
+
+func TestRemoveTabAdjustsActive(t *testing.T) {
+	tb := New()
+	tb.AddTab(Tab{ID: "1", Label: "S1"})
+	tb.AddTab(Tab{ID: "2", Label: "S2"})
+	tb.SetActive(0)
+	tb.RemoveTab(0)
+	if tb.ActiveIndex() != 0 {
+		t.Fatalf("expected active index 0 after removal, got %d", tb.ActiveIndex())
+	}
+}
+
+func TestSetColors(t *testing.T) {
+	tb := New()
+	tb.SetColors(tcell.ColorWhite, tcell.ColorBlue, tcell.ColorGray, tcell.ColorDefault)
+}
+
+func TestTabAtX(t *testing.T) {
+	tb := New()
+	tb.AddTab(Tab{ID: "1", Label: "A"})
+	tb.AddTab(Tab{ID: "2", Label: "B"})
+	idx := tb.tabAtX(0, 20)
+	if idx != 0 {
+		t.Fatalf("expected tab index 0 at x=0, got %d", idx)
 	}
 }

@@ -1,10 +1,8 @@
 package tabbar
 
 import (
-	"fmt"
-	"strings"
-
-	"charm.land/lipgloss/v2"
+	"github.com/gdamore/tcell/v2"
+	"github.com/rivo/tview"
 )
 
 type Tab struct {
@@ -12,177 +10,151 @@ type Tab struct {
 	Label string
 }
 
-type TabDockColors struct {
-	ActiveBg   string
-	InactiveFg string
-	Separator  string
-	NewButton  string
-	Background string
-}
-
-func DefaultColors() TabDockColors {
-	return TabDockColors{
-		ActiveBg:   "#569cd6",
-		InactiveFg: "#858585",
-		Separator:  "#444444",
-		NewButton:  "#4ec9b0",
-		Background: "#1a1a1a",
-	}
-}
-
 type TabDock struct {
-	tabs      []Tab
-	activeTab int
-	width     int
-	colors    TabDockColors
+	*tview.Box
+	tabs       []Tab
+	active     int
+	bgColor    tcell.Color
+	activeFg   tcell.Color
+	activeBg   tcell.Color
+	inactiveFg tcell.Color
+	inactiveBg tcell.Color
+	onClick    func(idx int)
 }
 
-func NewTabDock(tabs []Tab) *TabDock {
-	return &TabDock{
-		tabs:      tabs,
-		activeTab: 0,
-		width:     80,
-		colors:    DefaultColors(),
+func New() *TabDock {
+	t := &TabDock{
+		Box:        tview.NewBox(),
+		tabs:       []Tab{},
+		active:     0,
+		bgColor:    tcell.ColorDefault,
+		activeFg:   tcell.ColorWhite,
+		activeBg:   tcell.ColorBlue,
+		inactiveFg: tcell.ColorGray,
+		inactiveBg: tcell.ColorDefault,
 	}
+	t.SetDrawFunc(t.draw)
+	return t
 }
 
-func (td *TabDock) SetWidth(width int) {
-	td.width = width
+func (t *TabDock) AddTab(tab Tab) {
+	t.tabs = append(t.tabs, tab)
 }
 
-func (td *TabDock) SetColors(c TabDockColors) {
-	td.colors = c
-}
-
-func (td *TabDock) SetActiveTab(index int) {
-	if index >= 0 && index < len(td.tabs) {
-		td.activeTab = index
-	}
-}
-
-func (td *TabDock) GetActiveTab() int {
-	return td.activeTab
-}
-
-func (td *TabDock) ActiveTabID() string {
-	if td.activeTab >= 0 && td.activeTab < len(td.tabs) {
-		return td.tabs[td.activeTab].ID
-	}
-	return ""
-}
-
-func (td *TabDock) AddTab(tab Tab) {
-	td.tabs = append(td.tabs, tab)
-}
-
-func (td *TabDock) RemoveTab(index int) {
-	if index < 0 || index >= len(td.tabs) {
+func (t *TabDock) RemoveTab(index int) {
+	if index < 0 || index >= len(t.tabs) {
 		return
 	}
-	td.tabs = append(td.tabs[:index], td.tabs[index+1:]...)
-	if td.activeTab >= len(td.tabs) {
-		td.activeTab = len(td.tabs) - 1
-	}
-	if td.activeTab < 0 {
-		td.activeTab = 0
+	t.tabs = append(t.tabs[:index], t.tabs[index+1:]...)
+	if t.active >= len(t.tabs) && len(t.tabs) > 0 {
+		t.active = len(t.tabs) - 1
 	}
 }
 
-func (td *TabDock) UpdateTabLabel(index int, label string) {
-	if index >= 0 && index < len(td.tabs) {
-		td.tabs[index].Label = label
+func (t *TabDock) UpdateTab(index int, label string) {
+	if index < 0 || index >= len(t.tabs) {
+		return
+	}
+	t.tabs[index].Label = label
+}
+
+func (t *TabDock) SetActive(index int) {
+	if index >= 0 && index < len(t.tabs) {
+		t.active = index
 	}
 }
 
-func (td *TabDock) TabCount() int {
-	return len(td.tabs)
+func (t *TabDock) ActiveIndex() int {
+	return t.active
 }
 
-func (td *TabDock) View() string {
-	if len(td.tabs) == 0 {
-		return ""
-	}
+func (t *TabDock) TabCount() int {
+	return len(t.tabs)
+}
 
-	var parts []string
-
-	for i, tab := range td.tabs {
-		if i > 0 {
-			sep := lipgloss.NewStyle().
-				Foreground(lipgloss.Color(td.colors.Separator)).
-				Render(" | ")
-			parts = append(parts, sep)
+func (t *TabDock) SetOnClick(fn func(idx int)) {
+	t.onClick = fn
+	t.SetMouseCapture(func(action tview.MouseAction, event *tcell.EventMouse) (tview.MouseAction, *tcell.EventMouse) {
+		if action == tview.MouseLeftClick && t.onClick != nil {
+			x, _ := event.Position()
+			_, _, w, _ := t.GetRect()
+			idx := t.tabAtX(x, w)
+			if idx >= 0 {
+				t.onClick(idx)
+				return action, nil
+			}
+			return action, nil
 		}
-
-		var tabStr string
-		if i == td.activeTab {
-			tabStr = lipgloss.NewStyle().
-				Background(lipgloss.Color(td.colors.ActiveBg)).
-				Foreground(lipgloss.Color("#ffffff")).
-				Bold(true).
-				Padding(0, 2).
-				Render(tab.Label)
-		} else {
-			tabStr = lipgloss.NewStyle().
-				Foreground(lipgloss.Color(td.colors.InactiveFg)).
-				Padding(0, 2).
-				Render(tab.Label)
-		}
-		parts = append(parts, tabStr)
-	}
-
-	// + new button
-	plusStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color(td.colors.NewButton)).
-		Bold(true).
-		Padding(0, 1)
-
-	parts = append(parts, lipgloss.NewStyle().
-		Foreground(lipgloss.Color(td.colors.Separator)).
-		Render(" | "))
-	parts = append(parts, plusStyle.Render("+"))
-
-	// Help hint on the right side
-	helpHint := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("#6a6a6a")).
-		Render("⌃G 快捷键")
-
-	content := strings.Join(parts, "")
-
-	// Left side: tabs + new button, Right side: help hint
-	left := lipgloss.NewStyle().
-		Background(lipgloss.Color(td.colors.Background)).
-		Render(content)
-
-	right := lipgloss.NewStyle().
-		Background(lipgloss.Color(td.colors.Background)).
-		Render(helpHint)
-
-	return lipgloss.NewStyle().
-		Width(td.width).
-		Background(lipgloss.Color(td.colors.Background)).
-		Padding(0, 1).
-		Render(lipgloss.JoinHorizontal(lipgloss.Left, left, right))
+		return action, event
+	})
 }
 
-func (td *TabDock) HandleClick(x int) (string, bool) {
-	offset := 0
-	for i, tab := range td.tabs {
-		tabWidth := lipgloss.Width(tab.Label) + 4
-		if i > 0 {
-			tabWidth += 3
-		}
-		if x >= offset && x < offset+tabWidth {
-			td.activeTab = i
-			return tab.ID, true
-		}
-		offset += tabWidth
+func (t *TabDock) tabAtX(x, width int) int {
+	if len(t.tabs) == 0 || width <= 0 {
+		return -1
 	}
-	return "", false
+	labelTotal := 0
+	for _, tab := range t.tabs {
+		labelTotal += len(tab.Label) + 4
+	}
+	remaining := width - labelTotal
+	extraPerTab := 0
+	if len(t.tabs) > 0 && remaining > 0 {
+		extraPerTab = remaining / len(t.tabs)
+	}
+	cx := 0
+	for i, tab := range t.tabs {
+		tabW := len(tab.Label) + 4 + extraPerTab
+		if x >= cx && x < cx+tabW {
+			return i
+		}
+		cx += tabW
+	}
+	return -1
 }
 
-func (td *TabDock) GetTabID(index int) (string, error) {
-	if index < 0 || index >= len(td.tabs) {
-		return "", fmt.Errorf("invalid tab index: %d", index)
+func (t *TabDock) SetColors(activeFg, activeBg, inactiveFg, inactiveBg tcell.Color) {
+	t.activeFg = activeFg
+	t.activeBg = activeBg
+	t.inactiveFg = inactiveFg
+	t.inactiveBg = inactiveBg
+}
+
+func (t *TabDock) draw(screen tcell.Screen, x, y, width, height int) (int, int, int, int) {
+	if len(t.tabs) == 0 {
+		return x, y, width, height
 	}
-	return td.tabs[index].ID, nil
+
+	for cy := y; cy < y+height; cy++ {
+		for cx := x; cx < x+width; cx++ {
+			screen.SetContent(cx, cy, ' ', nil, tcell.StyleDefault.Background(t.bgColor))
+		}
+	}
+
+	labelTotal := 0
+	for _, tab := range t.tabs {
+		labelTotal += len(tab.Label) + 4
+	}
+	remaining := width - labelTotal
+	extraPerTab := 0
+	if len(t.tabs) > 0 && remaining > 0 {
+		extraPerTab = remaining / len(t.tabs)
+	}
+
+	cx := x
+	for i, tab := range t.tabs {
+		tabW := len(tab.Label) + 4 + extraPerTab
+		fg, bg := t.inactiveFg, t.inactiveBg
+		if i == t.active {
+			fg, bg = t.activeFg, t.activeBg
+		}
+		style := tcell.StyleDefault.Foreground(fg).Background(bg)
+		label := " " + tab.Label + " "
+		for j, ch := range label {
+			screen.SetContent(cx+j, y, ch, nil, style)
+		}
+		cx += tabW
+	}
+
+	return x, y, width, height
 }
