@@ -1,6 +1,13 @@
 package ui
 
-import "time"
+import (
+	"fmt"
+	"strings"
+	"time"
+
+	"charm.land/lipgloss/v2"
+	"github.com/example/agent-tui/internal/ui/syntax"
+)
 
 type Role int
 
@@ -112,3 +119,141 @@ func (s *Session) GenerateLabel() string {
 	}
 	return "New Session"
 }
+
+// RenderMessages renders all messages as a formatted string for viewport content.
+func (s *Session) RenderMessages(width int, theme ColorPalette) string {
+	if len(s.Messages) == 0 {
+		return ""
+	}
+	contentWidth := width - 4
+	if contentWidth < 10 {
+		contentWidth = 10
+	}
+
+	var sb strings.Builder
+	for _, msg := range s.Messages {
+		renderMessageToBuilder(&sb, msg, contentWidth, theme)
+	}
+	return sb.String()
+}
+
+func renderMessageToBuilder(sb *strings.Builder, msg Message, width int, theme ColorPalette) {
+	ts := lipgloss.NewStyle().
+		Foreground(lipgloss.Color(theme.Timestamp)).
+		Render(msg.Timestamp.Format("15:04"))
+
+	switch msg.Role {
+	case RoleUser:
+		badge := lipgloss.NewStyle().
+			Background(lipgloss.Color(theme.UserBg)).
+			Foreground(lipgloss.Color(theme.UserFg)).
+			Bold(true).
+			Padding(0, 1).
+			Render(" \U0001f5e3 ")
+		sb.WriteString(badge)
+		sb.WriteString(" ")
+		sb.WriteString(ts)
+		sb.WriteString("\n")
+		renderContent(sb, msg.Content, msg.Collapsed, width, theme, 3)
+
+	case RoleAssistant:
+		badge := lipgloss.NewStyle().
+			Background(lipgloss.Color(theme.AssistantBg)).
+			Foreground(lipgloss.Color(theme.AssistantFg)).
+			Bold(true).
+			Padding(0, 1).
+			Render(" \U0001f47e Chan ")
+		sb.WriteString(badge)
+		sb.WriteString(" ")
+		sb.WriteString(ts)
+		sb.WriteString("\n")
+
+		if msg.Thinking != nil {
+			renderThinkingBlock(sb, msg.Thinking, width, theme)
+		}
+		renderContent(sb, msg.Content, msg.Collapsed, width, theme, 1)
+
+	case RoleSystem:
+		badge := lipgloss.NewStyle().
+			Background(lipgloss.Color(theme.SystemBg)).
+			Foreground(lipgloss.Color(theme.SystemFg)).
+			Bold(true).
+			Padding(0, 1).
+			Render(" \u2699 sys ")
+		sb.WriteString(badge)
+		sb.WriteString(" ")
+		sb.WriteString(ts)
+		sb.WriteString("\n")
+		renderContent(sb, msg.Content, msg.Collapsed, width, theme, 1)
+	}
+
+	sb.WriteString("\n")
+}
+
+func renderContent(sb *strings.Builder, content string, collapsed bool, width int, theme ColorPalette, paddingLeft int) {
+	textStyle := lipgloss.NewStyle().
+		Foreground(lipgloss.Color(theme.Text)).
+		PaddingLeft(paddingLeft)
+
+	if collapsed {
+		sb.WriteString(foldContent(content, textStyle, theme))
+		return
+	}
+
+	highlighted := safeHighlight(content)
+	sb.WriteString(textStyle.Render(highlighted))
+}
+
+func safeHighlight(content string) string {
+	if hasCJK(content) {
+		return content
+	}
+	return syntax.Highlight(content, "")
+}
+
+func foldContent(content string, style lipgloss.Style, theme ColorPalette) string {
+	lines := strings.Split(content, "\n")
+	totalLines := len(lines)
+	if totalLines <= 3 {
+		return style.Render(content)
+	}
+	preview := strings.Join(lines[:3], "\n")
+	indicator := lipgloss.NewStyle().
+		Foreground(lipgloss.Color(theme.TextMuted)).
+		Render(fmt.Sprintf("\u25bc [expand %d lines]", totalLines-3))
+	return style.Render(preview) + "\n" + indicator
+}
+
+func renderThinkingBlock(sb *strings.Builder, t *Thinking, width int, theme ColorPalette) {
+	arrow := "\u25b6"
+	if t.Expanded {
+		arrow = "\u25bc"
+	}
+
+	charCount := len([]rune(t.Content))
+	durationStr := ""
+	if t.Duration > 0 {
+		durationStr = fmt.Sprintf(" \u00b7 %.1fs", t.Duration.Seconds())
+	}
+
+	header := lipgloss.NewStyle().
+		Foreground(lipgloss.Color(theme.ThinkingFg)).
+		Render(fmt.Sprintf("%s thinking %d chars%s", arrow, charCount, durationStr))
+	sb.WriteString(header)
+	sb.WriteString("\n")
+
+	if t.Expanded {
+		contentStyle := lipgloss.NewStyle().
+			Background(lipgloss.Color(theme.ThinkingBg)).
+			BorderLeft(true).
+			BorderStyle(lipgloss.Border{Left: "\u2502"}).
+			BorderForeground(lipgloss.Color(theme.ThinkingBorder)).
+			Padding(0, 1).
+			MarginLeft(1).
+			Width(width - 4)
+		sb.WriteString(contentStyle.Render(t.Content))
+		sb.WriteString("\n")
+	}
+}
+
+
