@@ -268,8 +268,17 @@ func (cp *ChatPanel) View() string {
 		lines = lines[:len(lines)-1]
 	}
 
-	// Slice to visible portion
-	start := visibleStart - msgRanges[0].startLine
+	// Find the first rendered message's start line
+	firstRenderedStart := 0
+	for _, mr := range msgRanges {
+		if mr.endLine > visibleStart {
+			firstRenderedStart = mr.startLine
+			break
+		}
+	}
+
+	// Slice to visible portion relative to first rendered message
+	start := visibleStart - firstRenderedStart
 	if start < 0 {
 		start = 0
 	}
@@ -399,7 +408,7 @@ func (cp *ChatPanel) renderMessage(sb *strings.Builder, msg Message) {
 			Foreground(lipgloss.Color(cp.colors.AssistantFg)).
 			Bold(true).
 			Padding(0, 1).
-			Render("👾 玄")
+			Render("👾 Chan")
 		sb.WriteString(badge)
 		sb.WriteString(" ")
 		sb.WriteString(ts)
