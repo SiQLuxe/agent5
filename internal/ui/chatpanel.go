@@ -1,173 +1,181 @@
 package ui
 
 import (
+	"fmt"
 	"strings"
 
-	tea "charm.land/bubbletea/v2"
-	"charm.land/bubbles/v2/viewport"
-	"charm.land/lipgloss/v2"
+	"github.com/gdamore/tcell/v2"
+	"github.com/rivo/tview"
 )
 
 type ChatPanel struct {
+	*tview.TextView
 	session       *Session
-	viewport      viewport.Model
-	width         int
-	height        int
-	colors        ChatPanelColors
-	currentTheme  ColorPalette
-	searchMode    bool
 	searchQuery   string
-	searchIdx     int
-	searchMatches []int
+	searchResults []int
+	currentMatch  int
 }
 
-type ChatPanelColors struct {
-	Background string
-	TextMuted  string
-}
-
-func DefaultChatPanelColors() ChatPanelColors {
-	return ChatPanelColors{
-		Background: "#1e1e1e",
-		TextMuted:  "#858585",
+func NewChatPanel() *ChatPanel {
+	c := &ChatPanel{
+		TextView: tview.NewTextView(),
 	}
+	c.SetDynamicColors(true)
+	c.SetScrollable(true)
+	c.SetWordWrap(true)
+	c.SetRegions(true)
+	return c
 }
 
-func NewChatPanel(session *Session) *ChatPanel {
-	vp := viewport.New()
-	vp.MouseWheelEnabled = true
-	vp.MouseWheelDelta = 3
-
-	cp := &ChatPanel{
-		session:  session,
-		viewport: vp,
-		width:    80,
-		height:   24,
-		colors:   DefaultChatPanelColors(),
-	}
-	cp.ApplyTheme(DefaultThemes[0].Colors)
-	return cp
+func (c *ChatPanel) SetSession(session *Session) {
+	c.session = session
+	c.refresh()
 }
 
-func (cp *ChatPanel) SetSession(s *Session) {
-	cp.session = s
-	cp.refreshContent()
-}
-
-func (cp *ChatPanel) Session() *Session {
-	return cp.session
-}
-
-func (cp *ChatPanel) SetColors(c ChatPanelColors) {
-	cp.colors = c
-}
-
-func (cp *ChatPanel) SetSize(width, height int) {
-	cp.width = width
-	cp.height = height
-	cp.viewport.SetWidth(width)
-	cp.viewport.SetHeight(height)
-}
-
-func (cp *ChatPanel) ScrollUp(lines int) {
-	cp.viewport.ScrollUp(lines)
-}
-
-func (cp *ChatPanel) ScrollDown(lines int) {
-	cp.viewport.ScrollDown(lines)
-}
-
-func (cp *ChatPanel) ScrollToBottom() {
-	cp.viewport.GotoBottom()
-}
-
-func (cp *ChatPanel) ScrollToTop() {
-	cp.viewport.GotoTop()
-}
-
-func (cp *ChatPanel) View() string {
-	cp.refreshContent()
-	result := cp.viewport.View()
-	style := lipgloss.NewStyle().
-		Width(cp.width).
-		Height(cp.height).
-		Background(lipgloss.Color(cp.colors.Background))
-	return style.Render(result)
-}
-
-func (cp *ChatPanel) refreshContent() {
-	if cp.session == nil || len(cp.session.Messages) == 0 {
-		cp.viewport.SetContent("")
+func (c *ChatPanel) refresh() {
+	if c.session == nil {
+		c.SetText("")
 		return
 	}
-	content := cp.session.RenderMessages(cp.width, cp.currentTheme)
-	cp.viewport.SetContent(content)
+	c.SetText(c.session.RenderMessages(80, DefaultThemes[0].Colors))
+	c.ScrollToEnd()
 }
 
-func (cp *ChatPanel) ApplyTheme(theme ColorPalette) {
-	cp.currentTheme = theme
-	cp.viewport.Style = lipgloss.NewStyle().
-		Background(lipgloss.Color(theme.Background))
+func (c *ChatPanel) ScrollUp(lines int) {
+	row, _ := c.GetScrollOffset()
+	c.ScrollTo(row-lines, 0)
 }
 
-// Search methods
-func (cp *ChatPanel) EnterSearch() {
-	cp.searchMode = true
-	cp.searchQuery = ""
-	cp.searchIdx = -1
+func (c *ChatPanel) ScrollDown(lines int) {
+	row, _ := c.GetScrollOffset()
+	c.ScrollTo(row+lines, 0)
 }
 
-func (cp *ChatPanel) ExitSearch() {
-	cp.searchMode = false
-	cp.searchQuery = ""
-	cp.searchMatches = nil
-	cp.searchIdx = -1
-	cp.viewport.ClearHighlights()
+func (c *ChatPanel) ScrollToTop() {
+	c.ScrollTo(0, 0)
 }
 
-func (cp *ChatPanel) IsSearchMode() bool {
-	return cp.searchMode
+func (c *ChatPanel) ScrollToBottom() {
+	c.ScrollToEnd()
 }
 
-func (cp *ChatPanel) SetSearchQuery(q string) {
-	cp.searchQuery = q
-	cp.searchMatches = nil
-	cp.searchIdx = -1
-	cp.viewport.ClearHighlights()
-	if q == "" || cp.session == nil {
+func (c *ChatPanel) EnterSearch() {
+	c.searchQuery = ""
+	c.searchResults = nil
+	c.currentMatch = -1
+}
+
+func (c *ChatPanel) ExitSearch() {
+	c.searchQuery = ""
+	c.searchResults = nil
+	c.currentMatch = -1
+	c.clearHighlights()
+}
+
+func (c *ChatPanel) IsSearchMode() bool {
+	return false // tracked by App
+}
+
+func (c *ChatPanel) SetSearchQuery(query string) {
+	c.searchQuery = query
+	c.findMatches()
+	if len(c.searchResults) > 0 {
+		c.currentMatch = 0
+		c.Highlight(c.matchRegionID(c.searchResults[0]))
+		c.ScrollTo(c.searchResults[0], 0)
+	}
+}
+
+func (c *ChatPanel) NextMatch() {
+	if len(c.searchResults) == 0 {
 		return
 	}
+	c.currentMatch = (c.currentMatch + 1) % len(c.searchResults)
+	c.Highlight()
+	c.Highlight(c.matchRegionID(c.searchResults[c.currentMatch]))
+	c.ScrollTo(c.searchResults[c.currentMatch], 0)
+}
 
-	lower := strings.ToLower(q)
-	var matchLines [][]int
-	lines := strings.Split(cp.session.RenderMessages(cp.width, cp.currentTheme), "\n")
+func (c *ChatPanel) PrevMatch() {
+	if len(c.searchResults) == 0 {
+		return
+	}
+	c.currentMatch--
+	if c.currentMatch < 0 {
+		c.currentMatch = len(c.searchResults) - 1
+	}
+	c.Highlight()
+	c.Highlight(c.matchRegionID(c.searchResults[c.currentMatch]))
+	c.ScrollTo(c.searchResults[c.currentMatch], 0)
+}
+
+func (c *ChatPanel) MatchCount() int {
+	return len(c.searchResults)
+}
+
+func (c *ChatPanel) CurrentMatch() int {
+	return c.currentMatch
+}
+
+func (c *ChatPanel) ApplyTheme(colors ColorPalette) {
+	c.SetBackgroundColor(hexToTCell(colors.Background))
+}
+
+func (c *ChatPanel) clearHighlights() {
+	c.Highlight()
+}
+
+func (c *ChatPanel) findMatches() {
+	c.searchResults = nil
+	if c.searchQuery == "" || c.session == nil {
+		return
+	}
+	query := strings.ToLower(c.searchQuery)
+	content := strings.ToLower(c.GetText(false))
+	lines := strings.Split(content, "\n")
 	for i, line := range lines {
-		if strings.Contains(strings.ToLower(line), lower) {
-			matchLines = append(matchLines, []int{i, i})
-			cp.searchMatches = append(cp.searchMatches, i)
+		if strings.Contains(line, query) {
+			c.searchResults = append(c.searchResults, i)
 		}
 	}
-
-	if len(matchLines) > 0 {
-		cp.searchIdx = 0
-		cp.viewport.SetHighlights(matchLines)
-	}
 }
 
-func (cp *ChatPanel) NextMatch() {
-	if cp.searchIdx < 0 {
-		return
-	}
-	cp.viewport.HighlightNext()
+func (c *ChatPanel) matchRegionID(line int) string {
+	return fmt.Sprintf("match-%d", line)
 }
 
-func (cp *ChatPanel) PrevMatch() {
-	if cp.searchIdx < 0 {
-		return
+func hexToTCell(hex string) tcell.Color {
+	if len(hex) == 0 {
+		return tcell.ColorDefault
 	}
-	cp.viewport.HighlightPrevious()
+	if hex[0] == '#' {
+		hex = hex[1:]
+	}
+	if len(hex) != 6 {
+		return tcell.ColorDefault
+	}
+	r := parseHexPair(hex[0:2])
+	g := parseHexPair(hex[2:4])
+	b := parseHexPair(hex[4:6])
+	return tcell.NewHexColor(int32(r)<<16 | int32(g)<<8 | int32(b))
 }
 
-func (cp *ChatPanel) Update(msg tea.Msg) {
-	cp.viewport.Update(msg)
+func parseHexPair(s string) int32 {
+	if len(s) != 2 {
+		return 0
+	}
+	return hexNibble(s[0])<<4 | hexNibble(s[1])
+}
+
+func hexNibble(c byte) int32 {
+	switch {
+	case c >= '0' && c <= '9':
+		return int32(c - '0')
+	case c >= 'a' && c <= 'f':
+		return int32(c - 'a' + 10)
+	case c >= 'A' && c <= 'F':
+		return int32(c - 'A' + 10)
+	default:
+		return 0
+	}
 }
