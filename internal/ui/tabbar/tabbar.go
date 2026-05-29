@@ -46,6 +46,9 @@ func (t *TabDock) RemoveTab(index int) {
 		return
 	}
 	t.tabs = append(t.tabs[:index], t.tabs[index+1:]...)
+	if index < t.active {
+		t.active--
+	}
 	if t.active >= len(t.tabs) && len(t.tabs) > 0 {
 		t.active = len(t.tabs) - 1
 	}
