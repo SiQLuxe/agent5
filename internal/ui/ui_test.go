@@ -20,6 +20,10 @@ func TestModel_Creation(t *testing.T) {
 	if len(m.sessions) != 1 {
 		t.Errorf("Expected 1 session, got %d", len(m.sessions))
 	}
+
+	if m.keyMap.Quit.Help().Key == "" {
+		t.Error("Expected keyMap to be initialized")
+	}
 }
 
 func TestModel_NewSession(t *testing.T) {

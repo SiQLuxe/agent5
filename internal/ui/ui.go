@@ -5,6 +5,8 @@ import (
 	"strings"
 	"time"
 
+	"charm.land/bubbles/v2/help"
+	"charm.land/bubbles/v2/key"
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 	"github.com/example/agent-tui/internal/ui/composer"
@@ -36,6 +38,8 @@ type Model struct {
 	composer      *composer.Composer
 	statusBar     *status.StatusBar
 	themeService  *ThemeService
+	keyMap        KeyMap
+	help          help.Model
 	isLoading     bool
 	showHelp      bool
 	lastText      string
@@ -63,6 +67,8 @@ func NewModel() *Model {
 		composer:      composer.NewComposer(),
 		statusBar:     status.NewStatusBar(),
 		themeService:  themeService,
+		keyMap:        DefaultKeyMap,
+		help:          help.New(),
 		isLoading:     false,
 	}
 }
@@ -110,13 +116,11 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.composer.AppendInput(msg.Content)
 
 	case tea.KeyPressMsg:
-		// Help panel: intercept all keys when visible
 		if m.showHelp {
 			m.showHelp = false
 			return m, nil
 		}
 
-		// Search mode: handle search-specific keys
 		if m.chatPanel.IsSearchMode() {
 			return m, m.handleSearchKey(msg)
 		}
@@ -125,52 +129,73 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 
-		key := msg.Key()
+		keyPress := msg
 
-		// Printable characters: Key.Text is populated (space → " ")
-		if key.Text != "" {
-			if key.Text == m.lastText && time.Since(m.clearTime) < 100*time.Millisecond {
+		// Printable characters: forward to composer
+		if keyPress.Key().Text != "" {
+			if keyPress.Key().Text == m.lastText && time.Since(m.clearTime) < 100*time.Millisecond {
 				m.lastText = ""
 				return m, nil
 			}
-			m.lastText = key.Text
-			m.composer.AppendInput(key.Text)
+			m.lastText = keyPress.Key().Text
+			m.composer.AppendInput(keyPress.Key().Text)
 			return m, nil
 		}
 
-		// Special keys: Key.Text is empty, use String() for matching
-		switch key.String() {
-		case "ctrl+c":
+		switch {
+		case key.Matches(keyPress, m.keyMap.Quit):
 			return m, tea.Quit
-		case "ctrl+g":
-			m.showHelp = true
-		case "ctrl+t":
-			m.themeService.NextTheme()
-		case "ctrl+n":
+		case key.Matches(keyPress, m.keyMap.NewSession):
 			m.newSession()
-		case "ctrl+q":
+		case key.Matches(keyPress, m.keyMap.CloseSession):
 			m.closeSession()
-		case "ctrl+e":
+		case key.Matches(keyPress, m.keyMap.RenameSession):
 			m.renameSession()
-		case "ctrl+y":
-			session := m.activeSessionPtr()
-			if session != nil {
+		case key.Matches(keyPress, m.keyMap.NextSession):
+			m.nextSession()
+		case key.Matches(keyPress, m.keyMap.PrevSession):
+			m.prevSession()
+		case key.Matches(keyPress, m.keyMap.ToggleThinking):
+			if session := m.activeSessionPtr(); session != nil {
 				session.ToggleThinking()
 			}
-		case "ctrl+l":
-			session := m.activeSessionPtr()
-			if session != nil {
+		case key.Matches(keyPress, m.keyMap.ToggleCollapse):
+			if session := m.activeSessionPtr(); session != nil {
 				session.ToggleCollapse()
 			}
-		case "ctrl+f":
+		case key.Matches(keyPress, m.keyMap.Search):
 			m.chatPanel.EnterSearch()
 			m.composer.SetInput("")
-		// Tab switching: alt+n/p (ctrl+tab not supported by most terminals)
-		case "alt+n", "alt+right":
-			m.nextSession()
-		case "alt+p", "alt+left":
-			m.prevSession()
-		// Session jump: alt+1~9 (ctrl+1~9 not supported by terminals)
+		case key.Matches(keyPress, m.keyMap.ToggleTheme):
+			m.themeService.NextTheme()
+		case key.Matches(keyPress, m.keyMap.ShowHelp):
+			m.showHelp = true
+		case key.Matches(keyPress, m.keyMap.ScrollUp):
+			m.chatPanel.ScrollUp(m.chatPanel.height / 2)
+		case key.Matches(keyPress, m.keyMap.ScrollDown):
+			m.chatPanel.ScrollDown(m.chatPanel.height / 2)
+		case key.Matches(keyPress, m.keyMap.ScrollTop):
+			m.chatPanel.ScrollToTop()
+		case key.Matches(keyPress, m.keyMap.ScrollBottom):
+			m.chatPanel.ScrollToBottom()
+		case key.Matches(keyPress, m.keyMap.SendMessage):
+			if strings.TrimSpace(m.composer.GetInput()) == "" {
+				return m, nil
+			}
+			m.isLoading = true
+			return m, m.submitMessageAsync()
+		case keyPress.Key().String() == "enter":
+			if strings.TrimSpace(m.composer.GetInput()) == "" {
+				return m, nil
+			}
+			m.isLoading = true
+			return m, m.submitMessageAsync()
+		case keyPress.Key().String() == "backspace":
+			m.composer.Backspace()
+		}
+
+		// Alt+1~9 session switching
+		switch keyPress.Key().String() {
 		case "alt+1":
 			m.switchToSession(0)
 		case "alt+2":
@@ -189,26 +214,6 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.switchToSession(7)
 		case "alt+9":
 			m.switchToSession(8)
-		case "pgup":
-			m.chatPanel.ScrollUp(m.chatPanel.height / 2)
-		case "pgdown":
-			m.chatPanel.ScrollDown(m.chatPanel.height / 2)
-		case "ctrl+up":
-			m.chatPanel.ScrollUp(1)
-		case "ctrl+down":
-			m.chatPanel.ScrollDown(1)
-		case "ctrl+home":
-			m.chatPanel.ScrollToTop()
-		case "ctrl+end":
-			m.chatPanel.ScrollToBottom()
-		case "enter":
-			if strings.TrimSpace(m.composer.GetInput()) == "" {
-				return m, nil
-			}
-			m.isLoading = true
-			return m, m.submitMessageAsync()
-		case "backspace":
-			m.composer.Backspace()
 		}
 	case tea.KeyReleaseMsg:
 		return m, nil
@@ -340,12 +345,10 @@ func (m *Model) View() tea.View {
 	result := statusContent + "\n" + chatContent + "\n" + composerContent + "\n" + tabContent
 
 	if m.showHelp {
-		result = m.renderHelpOverlay(result)
+		result = m.overlayHelp(result)
 	}
 
-	v := tea.NewView(result)
-	v.AltScreen = true
-	return v
+	return tea.NewView(result)
 }
 
 func (m *Model) renderSearchBar() string {
@@ -389,13 +392,9 @@ func (m *Model) renderSearchBar() string {
 		Render(content)
 }
 
-func (m *Model) renderHelpOverlay(underlying string) string {
-	helpContent := m.buildHelpPanel()
-
-	// Split underlying into lines, overlay help panel centered
+func (m *Model) overlayHelp(underlying string) string {
+	helpContent := m.help.View(m.keyMap)
 	lines := strings.Split(underlying, "\n")
-	totalLines := len(lines)
-
 	helpLines := strings.Split(helpContent, "\n")
 	helpHeight := len(helpLines)
 	helpWidth := 0
@@ -405,7 +404,7 @@ func (m *Model) renderHelpOverlay(underlying string) string {
 		}
 	}
 
-	// Center the help panel vertically and horizontally
+	totalLines := len(lines)
 	startRow := (totalLines - helpHeight) / 2
 	if startRow < 1 {
 		startRow = 1
@@ -420,7 +419,6 @@ func (m *Model) renderHelpOverlay(underlying string) string {
 	for i, line := range lines {
 		if i >= startRow && i < startRow+helpHeight {
 			helpLine := helpLines[i-startRow]
-			// Truncate/pad line to leftPad, then overlay help
 			base := line
 			if len(base) > leftPad {
 				base = base[:leftPad]
@@ -432,66 +430,7 @@ func (m *Model) renderHelpOverlay(underlying string) string {
 			result = append(result, line)
 		}
 	}
-
 	return strings.Join(result, "\n")
-}
-
-func (m *Model) buildHelpPanel() string {
-	borderStyle := lipgloss.NewStyle().
-		Border(lipgloss.RoundedBorder()).
-		BorderForeground(lipgloss.Color("#569cd6")).
-		Background(lipgloss.Color("#2d2d30")).
-		Padding(1, 2)
-
-	titleStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("#569cd6")).
-		Bold(true).
-		Align(lipgloss.Center)
-
-	keyStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("#d4d4d4")).
-		Background(lipgloss.Color("#333333")).
-		Padding(0, 1)
-
-	descStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("#858585"))
-
-	dividerStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("#3c3c3c"))
-
-	var rows []string
-	rows = append(rows, titleStyle.Render("⌨  快捷键"))
-	rows = append(rows, "")
-	rows = append(rows, formatHelpRow(keyStyle, descStyle, "⌃N", "新建会话"))
-	rows = append(rows, formatHelpRow(keyStyle, descStyle, "⌃Q", "关闭会话"))
-	rows = append(rows, formatHelpRow(keyStyle, descStyle, "⌃E", "重命名会话"))
-	rows = append(rows, formatHelpRow(keyStyle, descStyle, "⌃T", "切换主题"))
-	rows = append(rows, formatHelpRow(keyStyle, descStyle, "⌃Y", "折叠/展开思考"))
-	rows = append(rows, dividerStyle.Render("─────────────────────"))
-	rows = append(rows, formatHelpRow(keyStyle, descStyle, "⌥N / ⌥→", "下一会话"))
-	rows = append(rows, formatHelpRow(keyStyle, descStyle, "⌥P / ⌥←", "上一会话"))
-	rows = append(rows, formatHelpRow(keyStyle, descStyle, "⌥1~9", "跳转到第N个会话"))
-	rows = append(rows, dividerStyle.Render("─────────────────────"))
-	rows = append(rows, formatHelpRow(keyStyle, descStyle, "PgUp / PgDn", "滚动对话（半页）"))
-	rows = append(rows, formatHelpRow(keyStyle, descStyle, "⌃↑ / ⌃↓", "滚动对话（逐行）"))
-	rows = append(rows, dividerStyle.Render("─────────────────────"))
-	rows = append(rows, formatHelpRow(keyStyle, descStyle, "Enter", "发送消息"))
-	rows = append(rows, formatHelpRow(keyStyle, descStyle, "⌫", "删除字符"))
-	rows = append(rows, formatHelpRow(keyStyle, descStyle, "⌃G", "快捷键帮助"))
-	rows = append(rows, formatHelpRow(keyStyle, descStyle, "⌃C", "退出"))
-	rows = append(rows, "")
-	rows = append(rows, lipgloss.NewStyle().Foreground(lipgloss.Color("#6a6a6a")).Align(lipgloss.Center).Render("按任意键关闭"))
-
-	content := strings.Join(rows, "\n")
-	return borderStyle.Render(content)
-}
-
-func formatHelpRow(keyStyle, descStyle lipgloss.Style, key, desc string) string {
-	keyPart := keyStyle.Render(key)
-	descPart := descStyle.Render(desc)
-	// Pad key column to fixed width
-	paddedKey := keyPart + strings.Repeat(" ", max(0, 12-lipgloss.Width(keyPart)))
-	return paddedKey + " " + descPart
 }
 
 func (m *Model) SetMode(mode ViewMode) {
