@@ -6,7 +6,7 @@ import (
 	"time"
 
 	tea "charm.land/bubbletea/v2"
-	"github.com/charmbracelet/lipgloss"
+	"charm.land/lipgloss/v2"
 	"github.com/example/agent-tui/internal/ui/composer"
 	"github.com/example/agent-tui/internal/ui/status"
 	"github.com/example/agent-tui/internal/ui/tabbar"
