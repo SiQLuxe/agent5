@@ -355,14 +355,16 @@ func (a *App) sendMessage() {
 	a.isLoading = true
 
 	sessionID := s.ID
+	sessionPtr := s // capture session pointer for goroutine
 	go func() {
 		var fullResponse string
 		err := a.aiAssistant.ChatStream(sessionID, text, func(chunk string) {
 			fullResponse += chunk
 			a.QueueUpdateDraw(func() {
-				if s := a.activeSessionPtr(); s != nil && len(s.Messages) > 0 {
-					s.Messages[len(s.Messages)-1].Content = fullResponse
-					a.chatPanel.SetSession(s)
+				// Use captured session pointer — always the correct session
+				if len(sessionPtr.Messages) > 0 {
+					sessionPtr.Messages[len(sessionPtr.Messages)-1].Content = fullResponse
+					a.chatPanel.SetSession(sessionPtr)
 				}
 			})
 		})
@@ -370,11 +372,9 @@ func (a *App) sendMessage() {
 		a.QueueUpdateDraw(func() {
 			a.isLoading = false
 			if err != nil {
-				if s := a.activeSessionPtr(); s != nil {
-					s.AddMessage(RoleSystem, "Error: "+err.Error())
-				}
+				sessionPtr.AddMessage(RoleSystem, "Error: "+err.Error())
 			}
-			a.chatPanel.SetSession(a.activeSessionPtr())
+			a.chatPanel.SetSession(sessionPtr)
 			a.chatPanel.ScrollToBottom()
 		})
 	}()
