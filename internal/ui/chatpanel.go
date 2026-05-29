@@ -37,7 +37,7 @@ func (c *ChatPanel) refresh() {
 		c.SetText("")
 		return
 	}
-	c.SetText(c.session.RenderMessages(80, DefaultThemes[0].Colors))
+	c.SetText(tview.TranslateANSI(c.session.RenderMessages(80, DefaultThemes[0].Colors)))
 	c.ScrollToEnd()
 }
 
