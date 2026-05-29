@@ -169,13 +169,16 @@ func (a *App) handleInput(event *tcell.EventKey) *tcell.EventKey {
 	case event.Rune() == '?' && event.Modifiers() == tcell.ModNone:
 		a.enterHelp()
 		return nil
-	case event.Key() == tcell.KeyEnter && event.Modifiers()&tcell.ModCtrl != 0:
-		// Ctrl+Enter to send
+	case event.Key() == tcell.KeyEnter && event.Modifiers() == tcell.ModNone:
+		// Enter to send
 		if strings.TrimSpace(a.composer.GetInput()) == "" {
 			return nil
 		}
 		a.sendMessage()
 		return nil
+	case event.Key() == tcell.KeyEnter && (event.Modifiers()&tcell.ModCtrl != 0 || event.Modifiers()&tcell.ModAlt != 0):
+		// Ctrl+Enter or Alt+Enter: insert newline (let fall through to TextArea)
+		return event
 	case event.Key() == tcell.KeyPgUp:
 		a.chatPanel.ScrollUp(10)
 		return nil
