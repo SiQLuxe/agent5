@@ -212,6 +212,26 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "alt+9":
 			m.switchToSession(8)
 		}
+	case tea.MouseMsg:
+		if m.showHelp {
+			return m, nil
+		}
+		// Forward to viewport for mouse wheel scrolling
+		m.chatPanel.Update(msg)
+		// TabDock click handling
+		mouse := msg.Mouse()
+		if mouse.Y == m.height-1 {
+			tabID, ok := m.tabDock.HandleClick(mouse.X)
+			if ok {
+				for i, s := range m.sessions {
+					if s.ID == tabID {
+						m.switchToSession(i)
+						break
+					}
+				}
+			}
+		}
+
 	case tea.KeyReleaseMsg:
 		return m, nil
 	}
@@ -345,7 +365,9 @@ func (m *Model) View() tea.View {
 		result = m.overlayHelp(result)
 	}
 
-	return tea.NewView(result)
+	v := tea.NewView(result)
+	v.MouseMode = tea.MouseModeCellMotion
+	return v
 }
 
 func (m *Model) renderSearchBar() string {
