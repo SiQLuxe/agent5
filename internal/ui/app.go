@@ -355,22 +355,29 @@ func (a *App) sendMessage() {
 	a.isLoading = true
 
 	sessionID := s.ID
-	var fullResponse string
-	err := a.aiAssistant.ChatStream(sessionID, text, func(chunk string) {
-		fullResponse += chunk
-	})
+	go func() {
+		var fullResponse string
+		err := a.aiAssistant.ChatStream(sessionID, text, func(chunk string) {
+			fullResponse += chunk
+			a.QueueUpdateDraw(func() {
+				if s := a.activeSessionPtr(); s != nil && len(s.Messages) > 0 {
+					s.Messages[len(s.Messages)-1].Content = fullResponse
+					a.chatPanel.SetSession(s)
+				}
+			})
+		})
 
-	if s := a.activeSessionPtr(); s != nil {
-		if len(s.Messages) > 0 {
-			s.Messages[len(s.Messages)-1].Content = fullResponse
-		}
-		if err != nil {
-			s.AddMessage(RoleSystem, "Error: "+err.Error())
-		}
-	}
-	a.isLoading = false
-	a.chatPanel.SetSession(a.activeSessionPtr())
-	a.chatPanel.ScrollToBottom()
+		a.QueueUpdateDraw(func() {
+			a.isLoading = false
+			if err != nil {
+				if s := a.activeSessionPtr(); s != nil {
+					s.AddMessage(RoleSystem, "Error: "+err.Error())
+				}
+			}
+			a.chatPanel.SetSession(a.activeSessionPtr())
+			a.chatPanel.ScrollToBottom()
+		})
+	}()
 }
 
 func (a *App) AddWelcomeMessage() {

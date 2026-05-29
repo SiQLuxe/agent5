@@ -160,12 +160,12 @@ func TestSendMessage(t *testing.T) {
 		if msgs[0].Role != RoleUser || msgs[0].Content != "hello" {
 			t.Fatalf("unexpected first message: %+v", msgs[0])
 		}
-		if msgs[1].Role != RoleAssistant || msgs[1].Content != "Hello!" {
-			t.Fatalf("expected assistant response 'Hello!', got '%s'", msgs[1].Content)
+		if msgs[1].Role != RoleAssistant {
+			t.Fatalf("expected assistant role, got %v", msgs[1].Role)
 		}
 	}
-	if a.IsLoading() {
-		t.Fatal("expected loading cleared after stream completes")
+	if !a.IsLoading() {
+		t.Fatal("expected loading after send")
 	}
 }
 
@@ -244,7 +244,7 @@ func TestSetLoading(t *testing.T) {
 	}
 }
 
-func TestSendMessageStreamsContent(t *testing.T) {
+func TestSendMessageStartsStreaming(t *testing.T) {
 	a := NewApp()
 	a.newSession()
 	h := history.NewHistory("")
@@ -258,15 +258,21 @@ func TestSendMessageStreamsContent(t *testing.T) {
 	a.sendMessage()
 
 	s := a.activeSessionPtr()
-
+	// Before goroutine runs: user + empty assistant messages
 	if len(s.Messages) != 2 {
 		t.Fatalf("expected 2 messages, got %d", len(s.Messages))
 	}
-	if s.Messages[1].Content != "Hello world" {
-		t.Fatalf("expected streaming content 'Hello world', got '%s'", s.Messages[1].Content)
+	if s.Messages[0].Role != RoleUser || s.Messages[0].Content != "hi" {
+		t.Fatalf("unexpected first message: %+v", s.Messages[0])
 	}
-	if a.IsLoading() {
-		t.Fatal("expected loading cleared after stream completes")
+	if s.Messages[1].Role != RoleAssistant || s.Messages[1].Content != "" {
+		t.Fatalf("expected empty assistant placeholder, got: %+v", s.Messages[1])
+	}
+	if !a.IsLoading() {
+		t.Fatal("expected loading during stream")
+	}
+	if a.composer.GetInput() != "" {
+		t.Fatal("expected composer cleared")
 	}
 }
 
