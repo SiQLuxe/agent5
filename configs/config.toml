@@ -10,9 +10,6 @@ api_key = ""
 base_url = "https://api.deepseek.com"
 default_model = "deepseek-chat"
 
-[models.local]
-base_url = "http://localhost:11434"
-default_model = "llama3"
 
 default_client = "openai"
 theme = "dark"
