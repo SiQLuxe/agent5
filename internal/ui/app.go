@@ -7,6 +7,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/rivo/tview"
 
+	"github.com/example/agent-tui/internal/service"
 	"github.com/example/agent-tui/internal/ui/composer"
 	"github.com/example/agent-tui/internal/ui/status"
 	"github.com/example/agent-tui/internal/ui/tabbar"
@@ -37,6 +38,7 @@ type App struct {
 	isLoading     bool
 	keyMap        KeyMap
 	themeService  *ThemeService
+	aiAssistant   *service.AIAssistant
 }
 
 func NewApp() *App {
@@ -335,12 +337,15 @@ func (a *App) sendMessage() {
 	if strings.TrimSpace(text) == "" {
 		return
 	}
+	if a.aiAssistant == nil {
+		return
+	}
 	if s := a.activeSessionPtr(); s != nil {
 		s.AddMessage(RoleUser, text)
-		// Placeholder: AI response
-		s.AddMessage(RoleAssistant, "Echo: "+text)
+		s.AddMessage(RoleAssistant, "")
 	}
 	a.composer.ClearInput()
+	a.isLoading = true
 	a.chatPanel.SetSession(a.activeSessionPtr())
 }
 
@@ -354,8 +359,8 @@ func (a *App) AddWelcomeMessage() {
 
 // AI assistant (placeholder)
 
-func (a *App) SetAIAssistant(ai interface{}) {
-	// Placeholder for AI integration
+func (a *App) SetAIAssistant(ai *service.AIAssistant) {
+	a.aiAssistant = ai
 }
 
 // Theme

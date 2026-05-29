@@ -2,7 +2,31 @@ package ui
 
 import (
 	"testing"
+
+	"github.com/example/agent-tui/internal/ai"
+	"github.com/example/agent-tui/internal/data/history"
+	"github.com/example/agent-tui/internal/service"
 )
+
+type MockAIClientForApp struct {
+	mockResponse string
+}
+
+func (m *MockAIClientForApp) ChatCompletion(req ai.ChatCompletionRequest) (*ai.ChatCompletionResponse, error) {
+	return &ai.ChatCompletionResponse{}, nil
+}
+
+func (m *MockAIClientForApp) ChatCompletionStream(req ai.ChatCompletionRequest, callback func(string)) error {
+	if m.mockResponse != "" {
+		callback(m.mockResponse)
+	}
+	return nil
+}
+
+func (m *MockAIClientForApp) SetAPIKey(key string)    {}
+func (m *MockAIClientForApp) SetBaseURL(url string)    {}
+func (m *MockAIClientForApp) GetModel() string          { return "mock" }
+func (m *MockAIClientForApp) ListModels() ([]string, error) { return []string{"mock"}, nil }
 
 func TestNewApp(t *testing.T) {
 	a := NewApp()
@@ -114,15 +138,47 @@ func TestCloseSessionLastRemaining(t *testing.T) {
 func TestSendMessage(t *testing.T) {
 	a := NewApp()
 	a.newSession()
+	h := history.NewHistory("")
+	mockClient := &MockAIClientForApp{
+		mockResponse: "Hello!",
+	}
+	aiAssistant := service.NewAIAssistant(mockClient, h)
+	a.SetAIAssistant(aiAssistant)
+
 	a.composer.SetInput("hello")
 	a.sendMessage()
+
 	if a.composer.GetInput() != "" {
 		t.Fatal("expected composer cleared after send")
 	}
 	if s := a.activeSessionPtr(); s != nil {
 		msgs := s.Messages
 		if len(msgs) != 2 {
-			t.Fatalf("expected 2 messages (user + echo), got %d", len(msgs))
+			t.Fatalf("expected 2 messages (user + assistant), got %d", len(msgs))
+		}
+		if msgs[0].Role != RoleUser || msgs[0].Content != "hello" {
+			t.Fatalf("unexpected first message: %+v", msgs[0])
+		}
+		if msgs[1].Role != RoleAssistant || msgs[1].Content != "" {
+			t.Fatalf("expected empty assistant placeholder, got: %+v", msgs[1])
+		}
+	}
+	if !a.IsLoading() {
+		t.Fatal("expected loading after send")
+	}
+}
+
+func TestSendMessageNoAssistant(t *testing.T) {
+	a := NewApp()
+	a.newSession()
+	a.composer.SetInput("hello")
+	a.sendMessage()
+	if a.composer.GetInput() != "hello" {
+		t.Fatal("expected composer preserved when no ai assistant")
+	}
+	if s := a.activeSessionPtr(); s != nil {
+		if len(s.Messages) != 0 {
+			t.Fatalf("expected 0 messages with no ai assistant, got %d", len(s.Messages))
 		}
 	}
 }
