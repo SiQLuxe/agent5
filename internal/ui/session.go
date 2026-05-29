@@ -5,7 +5,6 @@ import (
 	"strings"
 	"time"
 
-	"charm.land/lipgloss/v2"
 	"github.com/example/agent-tui/internal/ui/syntax"
 )
 
@@ -138,18 +137,11 @@ func (s *Session) RenderMessages(width int, theme ColorPalette) string {
 }
 
 func renderMessageToBuilder(sb *strings.Builder, msg Message, width int, theme ColorPalette) {
-	ts := lipgloss.NewStyle().
-		Foreground(lipgloss.Color(theme.Timestamp)).
-		Render(msg.Timestamp.Format("15:04"))
+	ts := fmt.Sprintf("[%s]%s[-]", theme.Timestamp, msg.Timestamp.Format("15:04"))
 
 	switch msg.Role {
 	case RoleUser:
-		badge := lipgloss.NewStyle().
-			Background(lipgloss.Color(theme.UserBg)).
-			Foreground(lipgloss.Color(theme.UserFg)).
-			Bold(true).
-			Padding(0, 1).
-			Render(" \U0001f5e3 ")
+		badge := fmt.Sprintf("[%s:%s:b] \U0001f5e3 [-:-:-]", theme.UserFg, theme.UserBg)
 		sb.WriteString(badge)
 		sb.WriteString(" ")
 		sb.WriteString(ts)
@@ -157,12 +149,7 @@ func renderMessageToBuilder(sb *strings.Builder, msg Message, width int, theme C
 		renderContent(sb, msg.Content, msg.Collapsed, width, theme, 3)
 
 	case RoleAssistant:
-		badge := lipgloss.NewStyle().
-			Background(lipgloss.Color(theme.AssistantBg)).
-			Foreground(lipgloss.Color(theme.AssistantFg)).
-			Bold(true).
-			Padding(0, 1).
-			Render(" \U0001f47e Chan ")
+		badge := fmt.Sprintf("[%s:%s:b] \U0001f47e Chan [-:-:-]", theme.AssistantFg, theme.AssistantBg)
 		sb.WriteString(badge)
 		sb.WriteString(" ")
 		sb.WriteString(ts)
@@ -174,12 +161,7 @@ func renderMessageToBuilder(sb *strings.Builder, msg Message, width int, theme C
 		renderContent(sb, msg.Content, msg.Collapsed, width, theme, 1)
 
 	case RoleSystem:
-		badge := lipgloss.NewStyle().
-			Background(lipgloss.Color(theme.SystemBg)).
-			Foreground(lipgloss.Color(theme.SystemFg)).
-			Bold(true).
-			Padding(0, 1).
-			Render(" \u2699 sys ")
+		badge := fmt.Sprintf("[%s:%s:b] \u2699 sys [-:-:-]", theme.SystemFg, theme.SystemBg)
 		sb.WriteString(badge)
 		sb.WriteString(" ")
 		sb.WriteString(ts)
@@ -191,17 +173,15 @@ func renderMessageToBuilder(sb *strings.Builder, msg Message, width int, theme C
 }
 
 func renderContent(sb *strings.Builder, content string, collapsed bool, width int, theme ColorPalette, paddingLeft int) {
-	textStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color(theme.Text)).
-		PaddingLeft(paddingLeft)
+	padding := strings.Repeat(" ", paddingLeft)
 
 	if collapsed {
-		sb.WriteString(foldContent(content, textStyle, theme))
+		sb.WriteString(foldContent(content, theme.Text, theme.TextMuted, paddingLeft))
 		return
 	}
 
 	highlighted := safeHighlight(content)
-	sb.WriteString(textStyle.Render(highlighted))
+	sb.WriteString(fmt.Sprintf("[%s]%s%s[-]", theme.Text, padding, highlighted))
 }
 
 func safeHighlight(content string) string {
@@ -211,17 +191,16 @@ func safeHighlight(content string) string {
 	return syntax.Highlight(content, "")
 }
 
-func foldContent(content string, style lipgloss.Style, theme ColorPalette) string {
+func foldContent(content string, textColor, mutedColor string, paddingLeft int) string {
 	lines := strings.Split(content, "\n")
 	totalLines := len(lines)
+	padding := strings.Repeat(" ", paddingLeft)
 	if totalLines <= 3 {
-		return style.Render(content)
+		return fmt.Sprintf("[%s]%s%s[-]", textColor, padding, content)
 	}
 	preview := strings.Join(lines[:3], "\n")
-	indicator := lipgloss.NewStyle().
-		Foreground(lipgloss.Color(theme.TextMuted)).
-		Render(fmt.Sprintf("\u25bc [expand %d lines]", totalLines-3))
-	return style.Render(preview) + "\n" + indicator
+	indicator := fmt.Sprintf("[%s]%s\u25bc [expand %d lines][-]", mutedColor, padding, totalLines-3)
+	return fmt.Sprintf("[%s]%s%s[-]\n%s", textColor, padding, preview, indicator)
 }
 
 func renderThinkingBlock(sb *strings.Builder, t *Thinking, width int, theme ColorPalette) {
@@ -236,23 +215,14 @@ func renderThinkingBlock(sb *strings.Builder, t *Thinking, width int, theme Colo
 		durationStr = fmt.Sprintf(" \u00b7 %.1fs", t.Duration.Seconds())
 	}
 
-	header := lipgloss.NewStyle().
-		Foreground(lipgloss.Color(theme.ThinkingFg)).
-		Render(fmt.Sprintf("%s thinking %d chars%s", arrow, charCount, durationStr))
-	sb.WriteString(header)
+	sb.WriteString(fmt.Sprintf("[%s]%s thinking %d chars%s[-]", theme.ThinkingFg, arrow, charCount, durationStr))
 	sb.WriteString("\n")
 
 	if t.Expanded {
-		contentStyle := lipgloss.NewStyle().
-			Background(lipgloss.Color(theme.ThinkingBg)).
-			BorderLeft(true).
-			BorderStyle(lipgloss.Border{Left: "\u2502"}).
-			BorderForeground(lipgloss.Color(theme.ThinkingBorder)).
-			Padding(0, 1).
-			MarginLeft(1).
-			Width(width - 4)
-		sb.WriteString(contentStyle.Render(t.Content))
-		sb.WriteString("\n")
+		lines := strings.Split(t.Content, "\n")
+		for _, line := range lines {
+			sb.WriteString(fmt.Sprintf(" [%s]\u2502[%s:%s] %s[-:-]\n", theme.ThinkingBorder, theme.Text, theme.ThinkingBg, line))
+		}
 	}
 }
 
@@ -270,5 +240,3 @@ func hasCJK(s string) bool {
 	}
 	return false
 }
-
-
