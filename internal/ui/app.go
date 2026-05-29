@@ -82,7 +82,7 @@ func NewApp() *App {
 	chatFlex := tview.NewFlex().SetDirection(tview.FlexRow)
 	chatFlex.AddItem(a.statusBar, 1, 0, false)
 	chatFlex.AddItem(a.chatPanel, 0, 1, false)
-	chatFlex.AddItem(a.composer, 0, 0, true)
+	chatFlex.AddItem(a.composer, 3, 0, true)
 	chatFlex.AddItem(a.tabDock, 1, 0, false)
 	a.chatFlex = chatFlex
 
