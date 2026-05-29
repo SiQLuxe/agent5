@@ -906,14 +906,16 @@ import (
 )
 
 type ChatPanel struct {
-	session     *Session
-	viewport    viewport.Model
-	width       int
-	height      int
-	colors      ChatPanelColors
-	searchMode  bool
-	searchQuery string
-	searchIdx   int
+	session       *Session
+	viewport      viewport.Model
+	width         int
+	height        int
+	colors        ChatPanelColors
+	currentTheme  ColorPalette
+	searchMode    bool
+	searchQuery   string
+	searchIdx     int
+	searchMatches []int
 }
 
 type ChatPanelColors struct {

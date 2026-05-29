@@ -168,6 +168,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.composer.SetInput("")
 		case key.Matches(keyPress, m.keyMap.ToggleTheme):
 			m.themeService.NextTheme()
+			m.chatPanel.ApplyTheme(m.themeService.CurrentTheme().Colors)
 		case key.Matches(keyPress, m.keyMap.ShowHelp):
 			m.showHelp = true
 		case key.Matches(keyPress, m.keyMap.ScrollUp):
