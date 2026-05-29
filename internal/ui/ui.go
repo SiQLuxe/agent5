@@ -106,6 +106,11 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 
+		// Search mode: handle search-specific keys
+		if m.chatPanel.IsSearchMode() {
+			return m, m.handleSearchKey(msg)
+		}
+
 		if m.isLoading {
 			return m, nil
 		}
@@ -137,6 +142,14 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if session != nil {
 				session.ToggleThinking()
 			}
+		case "ctrl+l":
+			session := m.activeSessionPtr()
+			if session != nil {
+				session.ToggleCollapse()
+			}
+		case "ctrl+f":
+			m.chatPanel.EnterSearch()
+			m.composer.SetInput("")
 		// Tab switching: alt+n/p (ctrl+tab not supported by most terminals)
 		case "alt+n", "alt+right":
 			m.nextSession()
@@ -169,6 +182,14 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.chatPanel.ScrollUp(1)
 		case "ctrl+down":
 			m.chatPanel.ScrollDown(1)
+		case "ctrl+home":
+			m.chatPanel.ScrollToTop()
+		case "ctrl+end":
+			m.chatPanel.ScrollToBottom()
+		case "g":
+			m.chatPanel.ScrollToTop()
+		case "G":
+			m.chatPanel.ScrollToBottom()
 		case "enter":
 			return m, m.submitMessageAsync()
 		case "backspace":
@@ -176,6 +197,31 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 	}
 	return m, nil
+}
+
+func (m *Model) handleSearchKey(msg tea.KeyMsg) tea.Cmd {
+	key := msg.Key()
+
+	// Printable characters in search mode: update query
+	if key.Text != "" {
+		m.composer.AppendInput(key.Text)
+		m.chatPanel.SetSearchQuery(m.composer.GetInput())
+		return nil
+	}
+
+	switch key.String() {
+	case "esc":
+		m.chatPanel.ExitSearch()
+		m.composer.ClearInput()
+	case "enter":
+		m.chatPanel.NextMatch()
+	case "shift+enter":
+		m.chatPanel.PrevMatch()
+	case "backspace":
+		m.composer.Backspace()
+		m.chatPanel.SetSearchQuery(m.composer.GetInput())
+	}
+	return nil
 }
 
 func (m *Model) activeSessionPtr() *Session {
@@ -269,7 +315,14 @@ func (m *Model) submitMessageAsync() tea.Cmd {
 
 func (m *Model) View() tea.View {
 	statusContent := m.statusBar.View(m.width)
-	composerContent := m.composer.View()
+
+	var composerContent string
+	if m.chatPanel.IsSearchMode() {
+		composerContent = m.renderSearchBar()
+	} else {
+		composerContent = m.composer.View()
+	}
+
 	tabContent := m.tabDock.View()
 
 	chatHeight := m.height - 4
@@ -288,6 +341,47 @@ func (m *Model) View() tea.View {
 	v := tea.NewView(result)
 	v.AltScreen = true
 	return v
+}
+
+func (m *Model) renderSearchBar() string {
+	query := m.composer.GetInput()
+	matches := m.chatPanel.searchMatches
+	idx := m.chatPanel.searchIdx
+
+	status := ""
+	if len(matches) > 0 && idx >= 0 {
+		status = fmt.Sprintf(" [%d/%d]", idx+1, len(matches))
+	} else if query != "" {
+		status = " [0/0]"
+	}
+
+	prompt := lipgloss.NewStyle().
+		Foreground(lipgloss.Color("#dcdcaa")).
+		Bold(true).
+		Render("🔍 ")
+
+	inputText := lipgloss.NewStyle().
+		Foreground(lipgloss.Color("#d4d4d4")).
+		Render(query)
+
+	cursor := lipgloss.NewStyle().
+		Foreground(lipgloss.Color("#d4d4d4")).
+		Background(lipgloss.Color("#d4d4d4")).
+		Render(" ")
+
+	matchStatus := lipgloss.NewStyle().
+		Foreground(lipgloss.Color("#858585")).
+		Render(status)
+
+	content := prompt + inputText + cursor + matchStatus
+
+	return lipgloss.NewStyle().
+		Width(m.width).
+		Background(lipgloss.Color("#1a1a1a")).
+		Padding(0, 2).
+		BorderTop(true).
+		BorderForeground(lipgloss.Color("#3c3c3c")).
+		Render(content)
 }
 
 func (m *Model) renderHelpOverlay(underlying string) string {

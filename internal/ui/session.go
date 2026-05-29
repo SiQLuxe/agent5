@@ -34,6 +34,8 @@ type Message struct {
 	Content   string
 	Thinking  *Thinking
 	Timestamp time.Time
+	Collapsed bool // whether message content is folded
+	lineCount int  // cached rendered line count (0 = uncached)
 }
 
 type Session struct {
@@ -79,6 +81,15 @@ func (s *Session) FinishThinking(duration time.Duration) {
 func (s *Session) ToggleThinking() {
 	if len(s.Messages) > 0 && s.Messages[len(s.Messages)-1].Thinking != nil {
 		s.Messages[len(s.Messages)-1].Thinking.Expanded = !s.Messages[len(s.Messages)-1].Thinking.Expanded
+	}
+}
+
+// ToggleCollapse toggles the collapsed state of the last message.
+func (s *Session) ToggleCollapse() {
+	if len(s.Messages) > 0 {
+		s.Messages[len(s.Messages)-1].Collapsed = !s.Messages[len(s.Messages)-1].Collapsed
+		// Invalidate line count cache
+		s.Messages[len(s.Messages)-1].lineCount = 0
 	}
 }
 

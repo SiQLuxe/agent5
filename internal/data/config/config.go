@@ -21,12 +21,17 @@ type ModelsConfig struct {
 	Local    ModelConfig `toml:"local"`
 }
 
+type UIConfig struct {
+	MaxVisibleLines int `toml:"max_visible_lines"`
+}
+
 type Config struct {
 	Models        ModelsConfig `toml:"models"`
 	DefaultClient string       `toml:"default_client"`
 	Theme         string       `toml:"theme"`
 	ApprovalMode  string       `toml:"approval_mode"`
 	MaxSubagents  int          `toml:"max_subagents"`
+	UI            UIConfig     `toml:"ui"`
 }
 
 func LoadConfig(path string) (*Config, error) {
@@ -69,6 +74,9 @@ func GetDefaultConfig() *Config {
 		Theme:         "dark",
 		ApprovalMode:  "manual",
 		MaxSubagents:  3,
+		UI: UIConfig{
+			MaxVisibleLines: 8,
+		},
 	}
 }
 

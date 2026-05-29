@@ -43,20 +43,26 @@ func DefaultChatPanelColors() ChatPanelColors {
 }
 
 type ChatPanel struct {
-	session      *Session
-	width        int
-	height       int
-	colors       ChatPanelColors
-	scrollOffset int
+	session        *Session
+	width          int
+	height         int
+	colors         ChatPanelColors
+	scrollOffset   int
+	maxVisibleLines int // max lines before auto-collapse (0 = default 8)
+	searchMode     bool
+	searchQuery    string
+	searchMatches  []int // message indices matching query
+	searchIdx      int   // current match index
 }
 
 func NewChatPanel(session *Session) *ChatPanel {
 	return &ChatPanel{
-		session:      session,
-		width:        80,
-		height:       24,
-		colors:       DefaultChatPanelColors(),
-		scrollOffset: 0,
+		session:         session,
+		width:           80,
+		height:          24,
+		colors:          DefaultChatPanelColors(),
+		scrollOffset:    0,
+		maxVisibleLines: 8,
 	}
 }
 
@@ -73,8 +79,18 @@ func (cp *ChatPanel) SetColors(c ChatPanelColors) {
 }
 
 func (cp *ChatPanel) SetSize(width, height int) {
+	if cp.width != width {
+		// Width changed — invalidate all line count caches
+		for i := range cp.session.Messages {
+			cp.session.Messages[i].lineCount = 0
+		}
+	}
 	cp.width = width
 	cp.height = height
+}
+
+func (cp *ChatPanel) SetMaxVisibleLines(n int) {
+	cp.maxVisibleLines = n
 }
 
 func (cp *ChatPanel) ScrollUp(lines int) {
@@ -92,54 +108,243 @@ func (cp *ChatPanel) ScrollToBottom() {
 	cp.scrollOffset = 999999
 }
 
+func (cp *ChatPanel) ScrollToTop() {
+	cp.scrollOffset = 0
+}
+
+// Search methods
+func (cp *ChatPanel) EnterSearch() {
+	cp.searchMode = true
+	cp.searchQuery = ""
+	cp.searchMatches = nil
+	cp.searchIdx = -1
+}
+
+func (cp *ChatPanel) ExitSearch() {
+	cp.searchMode = false
+	cp.searchQuery = ""
+	cp.searchMatches = nil
+	cp.searchIdx = -1
+}
+
+func (cp *ChatPanel) IsSearchMode() bool {
+	return cp.searchMode
+}
+
+func (cp *ChatPanel) SetSearchQuery(q string) {
+	cp.searchQuery = q
+	cp.searchMatches = nil
+	cp.searchIdx = -1
+	if q == "" || cp.session == nil {
+		return
+	}
+	lower := strings.ToLower(q)
+	for i, msg := range cp.session.Messages {
+		if strings.Contains(strings.ToLower(msg.Content), lower) {
+			cp.searchMatches = append(cp.searchMatches, i)
+		}
+	}
+	if len(cp.searchMatches) > 0 {
+		cp.searchIdx = 0
+		cp.scrollToMessage(cp.searchMatches[0])
+	}
+}
+
+func (cp *ChatPanel) NextMatch() {
+	if len(cp.searchMatches) == 0 {
+		return
+	}
+	cp.searchIdx = (cp.searchIdx + 1) % len(cp.searchMatches)
+	cp.scrollToMessage(cp.searchMatches[cp.searchIdx])
+}
+
+func (cp *ChatPanel) PrevMatch() {
+	if len(cp.searchMatches) == 0 {
+		return
+	}
+	cp.searchIdx--
+	if cp.searchIdx < 0 {
+		cp.searchIdx = len(cp.searchMatches) - 1
+	}
+	cp.scrollToMessage(cp.searchMatches[cp.searchIdx])
+}
+
+func (cp *ChatPanel) scrollToMessage(msgIdx int) {
+	// Calculate line offset up to this message
+	offset := 0
+	for i := 0; i < msgIdx && i < len(cp.session.Messages); i++ {
+		offset += cp.messageLineCount(&cp.session.Messages[i])
+	}
+	cp.scrollOffset = offset
+}
+
+// messageLineCount returns cached or computed line count for a message
+func (cp *ChatPanel) messageLineCount(msg *Message) int {
+	if msg.lineCount > 0 {
+		return msg.lineCount
+	}
+	msg.lineCount = cp.computeLineCount(msg)
+	return msg.lineCount
+}
+
+func (cp *ChatPanel) computeLineCount(msg *Message) int {
+	var sb strings.Builder
+	cp.renderMessage(&sb, *msg)
+	return len(strings.Split(sb.String(), "\n"))
+}
+
+// View renders the chat panel with viewport, folding, and scrollbar
 func (cp *ChatPanel) View() string {
+	contentWidth := cp.width - 2 // reserve 1 col for scrollbar + 1 for padding
+	if contentWidth < 10 {
+		contentWidth = 10
+	}
+
 	style := lipgloss.NewStyle().
 		Width(cp.width).
 		Height(cp.height).
-		Background(lipgloss.Color(cp.colors.Background)).
-		Padding(1, 2)
-
-	var content strings.Builder
+		Background(lipgloss.Color(cp.colors.Background))
 
 	if cp.session == nil || len(cp.session.Messages) == 0 {
 		emptyStyle := lipgloss.NewStyle().
 			Foreground(lipgloss.Color(cp.colors.TextMuted)).
 			Padding(2, 0)
-		content.WriteString(emptyStyle.Render("开始新对话..."))
-		return style.Render(content.String())
+		return style.Render(emptyStyle.Render("开始新对话..."))
 	}
 
-	for _, msg := range cp.session.Messages {
-		cp.renderMessage(&content, msg)
+	// Build message line offsets
+	type msgRange struct {
+		msgIdx     int
+		startLine  int
+		endLine    int
+	}
+	var msgRanges []msgRange
+	totalLines := 0
+	for i := range cp.session.Messages {
+		lc := cp.messageLineCount(&cp.session.Messages[i])
+		msgRanges = append(msgRanges, msgRange{
+			msgIdx:    i,
+			startLine: totalLines,
+			endLine:   totalLines + lc,
+		})
+		totalLines += lc
 	}
 
-	rendered := content.String()
-	lines := strings.Split(rendered, "\n")
-
-	maxScroll := len(lines) - cp.height + 2
+	// Clamp scroll offset
+	viewportLines := cp.height - 2 // padding
+	if viewportLines < 1 {
+		viewportLines = 1
+	}
+	maxScroll := totalLines - viewportLines
 	if maxScroll < 0 {
 		maxScroll = 0
 	}
 	if cp.scrollOffset > maxScroll {
 		cp.scrollOffset = maxScroll
 	}
-
-	start := cp.scrollOffset
-	end := start + cp.height - 2
-	if end < 0 {
-		end = 0
+	if cp.scrollOffset < 0 {
+		cp.scrollOffset = 0
 	}
+
+	visibleStart := cp.scrollOffset
+	visibleEnd := visibleStart + viewportLines
+
+	// Render only visible messages
+	var content strings.Builder
+	for _, mr := range msgRanges {
+		if mr.endLine <= visibleStart {
+			continue // above viewport
+		}
+		if mr.startLine >= visibleEnd {
+			break // below viewport
+		}
+		cp.renderMessage(&content, cp.session.Messages[mr.msgIdx])
+	}
+
+	rendered := content.String()
+	lines := strings.Split(rendered, "\n")
+	// Remove trailing empty line from Split
+	if len(lines) > 0 && lines[len(lines)-1] == "" {
+		lines = lines[:len(lines)-1]
+	}
+
+	// Slice to visible portion
+	start := visibleStart - msgRanges[0].startLine
+	if start < 0 {
+		start = 0
+	}
+	end := start + viewportLines
 	if end > len(lines) {
 		end = len(lines)
 	}
 	if start > end {
 		start = end
 	}
-
 	visibleLines := lines[start:end]
-	visibleContent := strings.Join(visibleLines, "\n")
 
-	return style.Render(visibleContent)
+	// Pad to viewport height
+	for len(visibleLines) < viewportLines {
+		visibleLines = append(visibleLines, "")
+	}
+
+	// Build scrollbar
+	scrollbar := cp.buildScrollbar(totalLines, viewportLines)
+
+	// Combine content + scrollbar
+	var result strings.Builder
+	for i, line := range visibleLines {
+		// Pad content to contentWidth
+		lineRunes := []rune(line)
+		padded := line
+		if len(lineRunes) < contentWidth {
+			padded = line + strings.Repeat(" ", contentWidth-len(lineRunes))
+		} else if len(lineRunes) > contentWidth {
+			padded = string(lineRunes[:contentWidth])
+		}
+		if i < len(scrollbar) {
+			result.WriteString(padded + scrollbar[i] + "\n")
+		} else {
+			result.WriteString(padded + " \n")
+		}
+	}
+
+	return style.Padding(1, 1).Render(result.String())
+}
+
+func (cp *ChatPanel) buildScrollbar(totalLines, viewportLines int) []string {
+	if totalLines <= viewportLines {
+		return nil
+	}
+	bar := make([]string, viewportLines)
+	for i := range bar {
+		bar[i] = " "
+	}
+
+	thumbHeight := viewportLines * viewportLines / totalLines
+	if thumbHeight < 1 {
+		thumbHeight = 1
+	}
+
+	maxScroll := totalLines - viewportLines
+	thumbPos := 0
+	if maxScroll > 0 {
+		thumbPos = cp.scrollOffset * (viewportLines - thumbHeight) / maxScroll
+	}
+	if thumbPos+thumbHeight > viewportLines {
+		thumbPos = viewportLines - thumbHeight
+	}
+
+	thumbStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#555555"))
+	trackStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#333333"))
+
+	for i := 0; i < viewportLines; i++ {
+		if i >= thumbPos && i < thumbPos+thumbHeight {
+			bar[i] = thumbStyle.Render("█")
+		} else {
+			bar[i] = trackStyle.Render("░")
+		}
+	}
+	return bar
 }
 
 // hasCJK returns true if the string contains any CJK characters
@@ -180,7 +385,12 @@ func (cp *ChatPanel) renderMessage(sb *strings.Builder, msg Message) {
 			Foreground(lipgloss.Color(cp.colors.Text)).
 			PaddingLeft(3)
 		rendered := cp.highlightSafe(msg.Content)
-		sb.WriteString(textStyle.Render(rendered))
+		if msg.Collapsed {
+			rendered = cp.foldContent(rendered, textStyle)
+		} else {
+			rendered = textStyle.Render(rendered)
+		}
+		sb.WriteString(rendered)
 		sb.WriteString("\n\n")
 
 	case RoleAssistant:
@@ -203,7 +413,12 @@ func (cp *ChatPanel) renderMessage(sb *strings.Builder, msg Message) {
 			Foreground(lipgloss.Color(cp.colors.Text)).
 			PaddingLeft(1)
 		rendered := cp.highlightSafe(msg.Content)
-		sb.WriteString(textStyle.Render(rendered))
+		if msg.Collapsed {
+			rendered = cp.foldContent(rendered, textStyle)
+		} else {
+			rendered = textStyle.Render(rendered)
+		}
+		sb.WriteString(rendered)
 		sb.WriteString("\n\n")
 
 	case RoleSystem:
@@ -221,9 +436,27 @@ func (cp *ChatPanel) renderMessage(sb *strings.Builder, msg Message) {
 		textStyle := lipgloss.NewStyle().
 			Foreground(lipgloss.Color(cp.colors.Text)).
 			PaddingLeft(1)
-		sb.WriteString(textStyle.Render(msg.Content))
+		if msg.Collapsed {
+			sb.WriteString(cp.foldContent(msg.Content, textStyle))
+		} else {
+			sb.WriteString(textStyle.Render(msg.Content))
+		}
 		sb.WriteString("\n\n")
 	}
+}
+
+// foldContent shows first 3 lines + collapse indicator
+func (cp *ChatPanel) foldContent(content string, style lipgloss.Style) string {
+	lines := strings.Split(content, "\n")
+	totalLines := len(lines)
+	if totalLines <= 3 {
+		return style.Render(content)
+	}
+	preview := strings.Join(lines[:3], "\n")
+	indicator := lipgloss.NewStyle().
+		Foreground(lipgloss.Color(cp.colors.TextMuted)).
+		Render(fmt.Sprintf("▼ [展开 %d 行]", totalLines-3))
+	return style.Render(preview) + "\n" + indicator
 }
 
 // highlightSafe applies syntax highlighting, skipping chroma for CJK text to avoid duplication
