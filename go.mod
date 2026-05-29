@@ -9,7 +9,10 @@ require (
 	github.com/google/uuid v1.6.0
 )
 
-require charm.land/bubbles/v2 v2.1.0 // indirect
+require (
+	charm.land/bubbles/v2 v2.1.0 // indirect
+	github.com/atotto/clipboard v0.1.4 // indirect
+)
 
 require (
 	github.com/alecthomas/chroma/v2 v2.24.1

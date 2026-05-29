@@ -1,15 +1,13 @@
 package composer
 
 import (
-	"unicode/utf8"
-
+	"charm.land/bubbles/v2/textarea"
 	"charm.land/lipgloss/v2"
 )
 
 type ComposerColors struct {
 	Background string
 	Prompt     string
-	Separator  string
 	Text       string
 }
 
@@ -17,78 +15,82 @@ func DefaultColors() ComposerColors {
 	return ComposerColors{
 		Background: "#1a1a1a",
 		Prompt:     "#4ec9b0",
-		Separator:  "#3c3c3c",
 		Text:       "#d4d4d4",
 	}
 }
 
 type Composer struct {
-	width  int
-	input  string
-	colors ComposerColors
+	textarea textarea.Model
+	width    int
+	colors   ComposerColors
 }
 
 func NewComposer() *Composer {
-	return &Composer{
-		width:  80,
-		input:  "",
-		colors: DefaultColors(),
+	ta := textarea.New()
+	ta.DynamicHeight = true
+	ta.MinHeight = 1
+	ta.MaxHeight = 8
+	ta.ShowLineNumbers = false
+	ta.Prompt = "\u276f "  // ❯
+
+	c := &Composer{
+		textarea: ta,
+		width:    80,
+		colors:   DefaultColors(),
 	}
+	c.applyColors()
+	return c
 }
 
 func (c *Composer) SetWidth(width int) {
 	c.width = width
+	c.textarea.SetWidth(width)
 }
 
 func (c *Composer) SetColors(colors ComposerColors) {
 	c.colors = colors
+	c.applyColors()
 }
 
 func (c *Composer) SetInput(input string) {
-	c.input = input
+	c.textarea.SetValue(input)
 }
 
 func (c *Composer) GetInput() string {
-	return c.input
+	return c.textarea.Value()
 }
 
 func (c *Composer) ClearInput() {
-	c.input = ""
+	c.textarea.SetValue("")
 }
 
 func (c *Composer) AppendInput(char string) {
-	c.input += char
+	c.textarea.InsertString(char)
 }
 
 func (c *Composer) Backspace() {
-	if len(c.input) > 0 {
-		_, size := utf8.DecodeLastRuneInString(c.input)
-		c.input = c.input[:len(c.input)-size]
+	val := c.textarea.Value()
+	if len(val) > 0 {
+		runes := []rune(val)
+		c.textarea.SetValue(string(runes[:len(runes)-1]))
 	}
 }
 
 func (c *Composer) View() string {
-	prompt := lipgloss.NewStyle().
-		Foreground(lipgloss.Color(c.colors.Prompt)).
-		Bold(true).
-		Render("❯ ")
+	return c.textarea.View()
+}
 
-	inputText := lipgloss.NewStyle().
-		Foreground(lipgloss.Color(c.colors.Text)).
-		Render(c.input)
-
-	cursor := lipgloss.NewStyle().
-		Foreground(lipgloss.Color(c.colors.Text)).
-		Background(lipgloss.Color(c.colors.Text)).
-		Render(" ")
-
-	content := prompt + inputText + cursor
-
-	return lipgloss.NewStyle().
-		Width(c.width).
+func (c *Composer) applyColors() {
+	s := textarea.DefaultStyles(false)
+	s.Focused.Base = lipgloss.NewStyle().
 		Background(lipgloss.Color(c.colors.Background)).
-		Padding(0, 2).
 		BorderTop(true).
-		BorderForeground(lipgloss.Color(c.colors.Separator)).
-		Render(content)
+		BorderForeground(lipgloss.Color("#3c3c3c"))
+	s.Focused.Text = lipgloss.NewStyle().
+		Foreground(lipgloss.Color(c.colors.Text))
+	s.Focused.Prompt = lipgloss.NewStyle().
+		Foreground(lipgloss.Color(c.colors.Prompt))
+	s.Focused.CursorLine = lipgloss.NewStyle()
+	s.Focused.LineNumber = lipgloss.NewStyle()
+	c.textarea.SetStyles(s)
 }

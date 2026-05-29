@@ -186,11 +186,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.isLoading = true
 			return m, m.submitMessageAsync()
 		case keyPress.Key().String() == "enter":
-			if strings.TrimSpace(m.composer.GetInput()) == "" {
-				return m, nil
-			}
-			m.isLoading = true
-			return m, m.submitMessageAsync()
+			return m, nil  // Enter = newline in textarea, ignore here
 		case keyPress.Key().String() == "backspace":
 			m.composer.Backspace()
 		}
