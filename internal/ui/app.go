@@ -172,6 +172,9 @@ func (a *App) handleInput(event *tcell.EventKey) *tcell.EventKey {
 		a.enterHelp()
 		return nil
 	case event.Key() == tcell.KeyEnter && event.Modifiers() == tcell.ModNone:
+		if a.isLoading {
+			return nil
+		}
 		// Enter to send
 		if strings.TrimSpace(a.composer.GetInput()) == "" {
 			return nil

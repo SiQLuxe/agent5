@@ -3,6 +3,7 @@ package ui
 import (
 	"testing"
 
+	"github.com/gdamore/tcell/v2"
 	"github.com/example/agent-tui/internal/ai"
 	"github.com/example/agent-tui/internal/data/history"
 	"github.com/example/agent-tui/internal/service"
@@ -240,5 +241,30 @@ func TestSetLoading(t *testing.T) {
 	a.SetLoading(true)
 	if !a.IsLoading() {
 		t.Fatal("expected loading after SetLoading(true)")
+	}
+}
+
+func TestSendMessageBlockedDuringLoading(t *testing.T) {
+	a := NewApp()
+	a.newSession()
+	h := history.NewHistory("")
+	mockClient := &MockAIClientForApp{
+		mockResponse: "Hello!",
+	}
+	aiAssistant := service.NewAIAssistant(mockClient, h)
+	a.SetAIAssistant(aiAssistant)
+	a.SetLoading(true)
+	a.composer.SetInput("hello")
+
+	ev := tcell.NewEventKey(tcell.KeyEnter, 0, tcell.ModNone)
+	result := a.handleInput(ev)
+
+	if result != nil {
+		t.Fatal("expected Enter to be consumed (nil) during loading")
+	}
+	if s := a.activeSessionPtr(); s != nil {
+		if len(s.Messages) != 0 {
+			t.Fatal("expected no messages added during loading")
+		}
 	}
 }
