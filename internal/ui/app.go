@@ -340,13 +340,15 @@ func (a *App) sendMessage() {
 	if a.aiAssistant == nil {
 		return
 	}
-	if s := a.activeSessionPtr(); s != nil {
-		s.AddMessage(RoleUser, text)
-		s.AddMessage(RoleAssistant, "")
+	s := a.activeSessionPtr()
+	if s == nil {
+		return
 	}
+	s.AddMessage(RoleUser, text)
+	s.AddMessage(RoleAssistant, "")
 	a.composer.ClearInput()
 	a.isLoading = true
-	a.chatPanel.SetSession(a.activeSessionPtr())
+	a.chatPanel.SetSession(s)
 }
 
 func (a *App) AddWelcomeMessage() {
