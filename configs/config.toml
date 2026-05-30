@@ -1,20 +1,21 @@
 # configs/config.toml
+# NOTE: Root-level keys must appear BEFORE any [table] sections,
+# otherwise TOML parses them as belonging to the last opened table.
+
+default_client = "openai"
+theme = "dark"
+approval_mode = "manual"
+max_subagents = 3
 
 [models.openai]
 api_key = "sk-494cb5ad2fd84e479e0438902b1755dc"
-base_url = "http://localhost:8080"
+base_url = "http://localhost:8080/v1"
 default_model = "deepseek-pro"
 
 [models.deepseek]
 api_key = ""
 base_url = "https://api.deepseek.com"
 default_model = "deepseek-chat"
-
-
-default_client = "openai"
-theme = "dark"
-approval_mode = "manual"
-max_subagents = 3
 
 [ui]
 max_visible_lines = 8

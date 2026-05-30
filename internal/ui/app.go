@@ -39,6 +39,8 @@ type App struct {
 	keyMap        KeyMap
 	themeService  *ThemeService
 	aiAssistant   *service.AIAssistant
+	inputHistory  []string
+	historyIndex  int
 }
 
 func NewApp() *App {
@@ -196,6 +198,24 @@ func (a *App) handleInput(event *tcell.EventKey) *tcell.EventKey {
 	case event.Rune() == 'G' && event.Modifiers() == tcell.ModNone:
 		a.chatPanel.ScrollToBottom()
 		return nil
+	case event.Key() == tcell.KeyUp:
+		if a.historyIndex < len(a.inputHistory) {
+			a.historyIndex++
+			idx := len(a.inputHistory) - a.historyIndex
+			a.composer.SetInput(a.inputHistory[idx])
+		}
+		return nil
+	case event.Key() == tcell.KeyDown:
+		if a.historyIndex > 0 {
+			a.historyIndex--
+			if a.historyIndex == 0 {
+				a.composer.ClearInput()
+			} else {
+				idx := len(a.inputHistory) - a.historyIndex
+				a.composer.SetInput(a.inputHistory[idx])
+			}
+		}
+		return nil
 	case event.Modifiers()&tcell.ModAlt != 0:
 		switch event.Rune() {
 		case 'n', 'N':
@@ -274,7 +294,11 @@ func (a *App) exitHelp() {
 // Session management
 
 func (a *App) newSession() {
-	s := NewSession(uuid.New().String(), "New Session")
+	id := uuid.New().String()
+	if a.aiAssistant != nil {
+		id = a.aiAssistant.CreateSession("New Session")
+	}
+	s := NewSession(id, "New Session")
 	a.sessions = append(a.sessions, s)
 	a.tabDock.AddTab(tabbar.Tab{ID: s.ID, Label: "New Session"})
 	a.switchToSession(len(a.sessions) - 1)
@@ -340,6 +364,8 @@ func (a *App) sendMessage() {
 	if strings.TrimSpace(text) == "" {
 		return
 	}
+	a.inputHistory = append(a.inputHistory, text)
+	a.historyIndex = 0
 	if a.aiAssistant == nil {
 		return
 	}
@@ -376,6 +402,17 @@ func (a *App) sendMessage() {
 			}
 			a.chatPanel.SetSession(sessionPtr)
 			a.chatPanel.ScrollToBottom()
+			// Update tab label after first AI response
+			label := sessionPtr.GenerateLabel()
+			if label != "New Session" {
+				sessionPtr.Label = label
+				for i, s := range a.sessions {
+					if s == sessionPtr {
+						a.tabDock.UpdateTab(i, label)
+						break
+					}
+				}
+			}
 		})
 	}()
 }
@@ -401,6 +438,7 @@ func (a *App) applyTheme() {
 	a.statusBar.SetBackgroundColor(hexToTCell(colors.Background))
 	a.chatPanel.ApplyTheme(colors)
 	a.composer.SetBackgroundColor(hexToTCell(colors.Background))
+	a.composer.SetPromptColor(colors.InputPrompt)
 }
 
 // Loading state (for tests)

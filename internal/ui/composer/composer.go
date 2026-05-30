@@ -1,6 +1,8 @@
 package composer
 
 import (
+	"fmt"
+
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
 )
@@ -41,6 +43,10 @@ func (c *Composer) GetInput() string {
 
 func (c *Composer) ClearInput() {
 	c.textArea.SetText("", true)
+}
+
+func (c *Composer) SetPromptColor(color string) {
+	c.prompt.SetText(fmt.Sprintf("[%s]> [-]", color))
 }
 
 func (c *Composer) SetBackgroundColor(color tcell.Color) {

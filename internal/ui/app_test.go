@@ -276,6 +276,48 @@ func TestSendMessageStartsStreaming(t *testing.T) {
 	}
 }
 
+func TestNewSessionRegistersInHistory(t *testing.T) {
+	a := NewApp()
+	h := history.NewHistory("")
+	mockClient := &MockAIClientForApp{
+		mockResponse: "Hello!",
+	}
+	aiAssistant := service.NewAIAssistant(mockClient, h)
+	a.SetAIAssistant(aiAssistant)
+	a.newSession()
+
+	s := a.activeSessionPtr()
+	if s == nil {
+		t.Fatal("expected active session")
+	}
+
+	// History should have this session registered
+	sessions := h.GetSessions()
+	found := false
+	for _, si := range sessions {
+		if si.ID == s.ID {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatal("BUG: session not registered in history store - ChatStream AddMessage will silently fail, API receives empty messages")
+	}
+
+	// Simulate what ChatStream does - AddMessage should succeed now
+	err := h.AddMessage(s.ID, "user", "hello")
+	if err != nil {
+		t.Fatalf("AddMessage failed: %v", err)
+	}
+	msgs := h.GetMessages(s.ID)
+	if len(msgs) != 1 {
+		t.Fatalf("expected 1 message in history, got %d", len(msgs))
+	}
+	if msgs[0].Role != "user" || msgs[0].Content != "hello" {
+		t.Fatalf("unexpected message: %+v", msgs[0])
+	}
+}
+
 func TestSendMessageBlockedDuringLoading(t *testing.T) {
 	a := NewApp()
 	a.newSession()
