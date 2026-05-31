@@ -48,7 +48,7 @@ func TestNewAppSessions(t *testing.T) {
 
 func TestNewAppHasKeyMap(t *testing.T) {
 	a := NewApp()
-	if a.keyMap.Quit == 0 {
+	if a.keyMap.NewSession == 0 {
 		t.Fatal("expected non-zero key map")
 	}
 }
@@ -315,6 +315,111 @@ func TestNewSessionRegistersInHistory(t *testing.T) {
 	}
 	if msgs[0].Role != "user" || msgs[0].Content != "hello" {
 		t.Fatalf("unexpected message: %+v", msgs[0])
+	}
+}
+
+func TestShortcutNewSession_CtrlN(t *testing.T) {
+	a := NewApp()
+	ev := tcell.NewEventKey(tcell.KeyCtrlN, 0, tcell.ModNone)
+	result := a.handleInput(ev)
+	if result != nil {
+		t.Fatal("expected Ctrl+N to be consumed (nil)")
+	}
+	if len(a.sessions) != 1 {
+		t.Fatalf("expected 1 session after Ctrl+N, got %d", len(a.sessions))
+	}
+}
+
+func TestShortcutCloseSession_CtrlW(t *testing.T) {
+	a := NewApp()
+	a.newSession()
+	a.newSession()
+	ev := tcell.NewEventKey(tcell.KeyCtrlW, 0, tcell.ModNone)
+	result := a.handleInput(ev)
+	if result != nil {
+		t.Fatal("expected Ctrl+W to be consumed (nil)")
+	}
+	if len(a.sessions) != 1 {
+		t.Fatalf("expected 1 session after close, got %d", len(a.sessions))
+	}
+}
+
+func TestShortcutRenameSession_CtrlR_NoPanic(t *testing.T) {
+	a := NewApp()
+	ev := tcell.NewEventKey(tcell.KeyCtrlR, 0, tcell.ModNone)
+	result := a.handleInput(ev)
+	if result != nil {
+		t.Fatal("expected Ctrl+R to be consumed (nil)")
+	}
+}
+
+func TestShortcutNextSession_Tab(t *testing.T) {
+	a := NewApp()
+	a.newSession()
+	a.newSession()
+	a.switchToSession(0)
+	ev := tcell.NewEventKey(tcell.KeyTab, 0, tcell.ModNone)
+	result := a.handleInput(ev)
+	if result != nil {
+		t.Fatal("expected Tab to be consumed (nil)")
+	}
+	if a.activeSession != 1 {
+		t.Fatalf("expected active session 1, got %d", a.activeSession)
+	}
+}
+
+func TestShortcutPrevSession_ShiftTab(t *testing.T) {
+	a := NewApp()
+	a.newSession()
+	a.newSession()
+	a.switchToSession(0)
+	ev := tcell.NewEventKey(tcell.KeyBacktab, 0, tcell.ModNone)
+	result := a.handleInput(ev)
+	if result != nil {
+		t.Fatal("expected Shift+Tab to be consumed (nil)")
+	}
+	if a.activeSession != 1 {
+		t.Fatalf("expected active session 1 (wrap), got %d", a.activeSession)
+	}
+}
+
+func TestShortcutToggleThinking_CtrlT(t *testing.T) {
+	a := NewApp()
+	a.newSession()
+	s := a.activeSessionPtr()
+	s.Messages = append(s.Messages, Message{Role: RoleAssistant, Content: "test"})
+	s.Messages[0].Thinking = &Thinking{Content: "thinking...", Expanded: false}
+	ev := tcell.NewEventKey(tcell.KeyCtrlT, 0, tcell.ModNone)
+	result := a.handleInput(ev)
+	if result != nil {
+		t.Fatal("expected Ctrl+T to be consumed (nil)")
+	}
+	if !s.Messages[0].Thinking.Expanded {
+		t.Fatal("expected Thinking.Expanded to be true after toggle")
+	}
+}
+
+func TestShortcutToggleCollapse_CtrlY(t *testing.T) {
+	a := NewApp()
+	a.newSession()
+	s := a.activeSessionPtr()
+	s.Messages = append(s.Messages, Message{Role: RoleAssistant, Content: "test", Collapsed: false})
+	ev := tcell.NewEventKey(tcell.KeyCtrlY, 0, tcell.ModNone)
+	result := a.handleInput(ev)
+	if result != nil {
+		t.Fatal("expected Ctrl+Y to be consumed (nil)")
+	}
+	if !s.Messages[0].Collapsed {
+		t.Fatal("expected Message.Collapsed to be true after toggle")
+	}
+}
+
+func TestShortcutToggleTheme_CtrlK_Consumed(t *testing.T) {
+	a := NewApp()
+	ev := tcell.NewEventKey(tcell.KeyCtrlK, 0, tcell.ModNone)
+	result := a.handleInput(ev)
+	if result != nil {
+		t.Fatal("expected Ctrl+K to be consumed (nil)")
 	}
 }
 

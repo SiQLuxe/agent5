@@ -20,6 +20,7 @@ func New() *StatusBar {
 	}
 	s.SetDynamicColors(true)
 	s.SetTextAlign(tview.AlignLeft)
+	s.SetTextStyle(tcell.StyleDefault.Background(tcell.ColorDefault))
 	return s
 }
 
@@ -47,5 +48,5 @@ func (s *StatusBar) refresh() {
 	if !s.connected {
 		connStr = "○"
 	}
-	s.SetText(fmt.Sprintf("  %s  Mode: %s  Tasks: %d", connStr, s.mode, s.tasks))
+	s.SetText(fmt.Sprintf("  %s  Mode: %s  Tasks: %d  Ctrl+O 帮助", connStr, s.mode, s.tasks))
 }

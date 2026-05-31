@@ -2,64 +2,77 @@
 
 ## Problem
 
-1. **Alt shortcuts don't work on macOS**: macOS Option key sends Unicode characters (˜, ∑, ®, etc.) instead of ModAlt key events. All `Alt+N/W/R/.//,/T/Y/S` shortcuts were non-functional on macOS Terminal.app.
-2. **`q` quit shortcut conflicts with typing**: Pressing `q` in composer exits the app. User cannot type the letter `q` in messages.
-3. **Tab bar no active visual indicator**: Active tab has no background color, making it hard to identify which session is selected.
+1. **Alt shortcuts don't work on macOS**: macOS Option key sends Unicode characters (˜, ∑, ®, etc.) instead of ModAlt key events. All `Alt+N/W/R/.//,/T/Y/S` shortcuts non-functional on macOS.
+2. **`q` quit shortcut conflicts with typing**: Pressing `q` in composer exits app. User cannot type `q` in messages.
+3. **Tab bar no active visual indicator**: Active tab has no background color, making it hard to identify selected session.
 
-## Solution
+## Design
 
-### 1. Replace Alt shortcuts with Ctrl shortcuts (completed)
+### 1. Dual shortcut support (Ctrl + Alt)
 
-All `Alt+` shortcuts replaced with macOS-compatible `Ctrl+` or `Tab` equivalents:
+Both Ctrl and Alt variants work simultaneously:
 
-| Original | Replacement | Action |
-|----------|-------------|--------|
-| Alt+N    | Ctrl+N      | New session |
-| Alt+W    | Ctrl+W      | Close session |
-| Alt+R    | Ctrl+R      | Rename session |
-| Alt+.    | Tab         | Next session |
-| Alt+,    | Shift+Tab   | Previous session |
-| Alt+T    | Ctrl+T      | Toggle thinking |
-| Alt+Y    | Ctrl+Y      | Toggle collapse |
-| Alt+Shift+T | Ctrl+K   | Toggle theme |
-| Alt+{1-9} | (removed)  | Direct session switch (unreliable on macOS) |
+| Ctrl (macOS/Linux/Win) | Alt (Linux/Win) | Action |
+|------------------------|-----------------|--------|
+| Ctrl+N                 | Alt+N           | New session |
+| Ctrl+W                 | Alt+W           | Close session |
+| Ctrl+R                 | Alt+R           | Rename session |
+| Tab                    | Alt+.           | Next session |
+| Shift+Tab              | Alt+,           | Previous session |
+| Ctrl+T                 | Alt+T           | Toggle thinking |
+| Ctrl+Y                 | Alt+Y           | Toggle collapse |
+| Ctrl+K                 | Alt+Shift+S     | Toggle theme |
+| —                      | Alt+{1-9}       | Direct session switch |
+| Ctrl+F                 | —               | Search chat |
+| Ctrl+O                 | —               | Help |
+| Ctrl+C                 | —               | Quit |
+
+Ctrl variants work on all platforms. Alt variants work on Windows/Linux only (macOS Option key doesn't generate ModAlt by default).
 
 **Files changed:**
-- `internal/ui/app.go` — `handleInput()`: replaced `ModAlt` branch with `KeyCtrl*`/`KeyTab`/`KeyBacktab` cases
-- `internal/ui/keymap.go` — `ShortHelp()`/`FullHelp()`: updated display text
-- `internal/ui/app_test.go` — added 8 shortcut tests
+- `internal/ui/app.go` — `handleInput()`: Ctrl `KeyCtrl*`/`KeyTab`/`KeyBacktab` cases added, `ModAlt` block restored for cross-platform compatibility
+- `internal/ui/keymap.go` — `ShortHelp()`/`FullHelp()`: shows both variants
+- `internal/ui/app_test.go` — 8 Ctrl shortcut tests + Alt compatibility
 
 ### 2. Remove `q` quit shortcut
 
 Delete the `q` → quit handler. Only `Ctrl+C` remains as exit mechanism.
 
 ```go
-// DELETE this block:
+// REMOVED:
 case event.Rune() == 'q' && event.Modifiers() == tcell.ModNone:
     a.Stop()
-    return nil
 ```
+
+Also removed `Quit` field from `KeyMap` struct.
 
 **Files changed:**
 - `internal/ui/app.go` — remove case block
-- `internal/ui/keymap.go` — remove `q` from help text
+- `internal/ui/keymap.go` — remove `Quit` field, update help text
+- `internal/ui/app_test.go`, `internal/ui/keymap_test.go` — update test assertions
 
 ### 3. Tab bar active background color
 
-Active tab uses theme accent color as background (`activeBg: colors.Accent`, `activeFg: white`). Applied through existing `SetColors()` call in `applyTheme()`.
+Active tab uses theme accent color (`colors.Accent`, default `#569cd6`) as background with white text. Applied through `tabDock.SetColors()` in `applyTheme()`:
 
-Inactive tabs: `ColorGray` text, `ColorDefault` background. Bar background: `ColorDefault`.
+```go
+a.tabDock.SetColors(white, hexToTCell(colors.Accent), gray, default)
+```
+
+Inactive tabs: gray text, default background. Bar background: default.
 
 **Files changed:**
-- `internal/ui/app.go` — `applyTheme()`: add `tabDock.SetColors()` call
+- `internal/ui/app.go` — `applyTheme()`: added `tabDock.SetColors()` call
 
 ### 4. Diagnostic tool cleanup
 
-Remove `tools/keydiag/` directory after investigation is complete.
+Removed `tools/keydiag/` directory and `/tmp/keydiag`/`/tmp/tdiag` binaries.
 
 ## Test Plan
 
-- Build: `go build -o agent ./cmd/agent` succeeds
-- Test: `go test ./...` passes all tests
-- Manual: Run `./agent` and verify Ctrl+N/W/Tab etc. create/switch/close sessions
-- Manual: Verify typing 'q' in composer inputs 'q' instead of quitting
+- `go build -o agent ./cmd/agent` — succeeds
+- `go test ./...` — all tests pass
+- Manual: run `./agent`, verify Ctrl+N / Alt+N create session, Tab / Alt+. switch session
+- Manual: verify typing 'q' in composer inputs 'q' instead of quitting
+- Manual: verify active tab shows accent background color
+- Verification: `cat /tmp/tcell-diag.log` confirms tcell produces correct Key events

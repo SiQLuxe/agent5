@@ -2,6 +2,8 @@ package composer
 
 import (
 	"testing"
+
+	"github.com/gdamore/tcell/v2"
 )
 
 func TestNew(t *testing.T) {
@@ -43,5 +45,16 @@ func TestPromptDisplayed(t *testing.T) {
 	}
 	if c.prompt.GetText(false) != "> " {
 		t.Fatalf("expected prompt '> ', got %q", c.prompt.GetText(false))
+	}
+}
+
+func TestSetAccentColor(t *testing.T) {
+	c := New()
+	if c.leftBorder == nil {
+		t.Fatal("expected non-nil leftBorder")
+	}
+	c.SetAccentColor(tcell.ColorBlue)
+	if c.accentColor != tcell.ColorBlue {
+		t.Fatalf("expected accentColor Blue, got %v", c.accentColor)
 	}
 }

@@ -23,24 +23,24 @@ const (
 
 type App struct {
 	*tview.Application
-	pages         *tview.Pages
-	chatFlex      *tview.Flex
-	statusBar     *status.StatusBar
-	chatPanel     *ChatPanel
-	composer      *composer.Composer
-	tabDock       *tabbar.TabDock
-	searchInput   *tview.InputField
-	searchStatus  *tview.TextView
-	helpView      *tview.TextView
-	sessions      []*Session
+	pages        *tview.Pages
+	chatFlex     *tview.Flex
+	statusBar    *status.StatusBar
+	chatPanel    *ChatPanel
+	composer     *composer.Composer
+	tabDock      *tabbar.TabDock
+	searchInput  *tview.InputField
+	searchStatus *tview.TextView
+	helpView     *tview.TextView
+	sessions     []*Session
 	activeSession int
-	mode          AppMode
-	isLoading     bool
-	keyMap        KeyMap
-	themeService  *ThemeService
-	aiAssistant   *service.AIAssistant
-	inputHistory  []string
-	historyIndex  int
+	mode         AppMode
+	isLoading    bool
+	keyMap       KeyMap
+	themeService *ThemeService
+	aiAssistant  *service.AIAssistant
+	inputHistory []string
+	historyIndex int
 }
 
 func NewApp() *App {
@@ -81,6 +81,7 @@ func NewApp() *App {
 	a.helpView.SetTextAlign(tview.AlignLeft)
 	a.helpView.SetBorder(true)
 	a.helpView.SetTitle(" Help ")
+	a.helpView.SetTextStyle(tcell.StyleDefault.Background(tcell.ColorDefault))
 
 	// Build layout: StatusBar + ChatPanel + Composer + TabDock
 	chatFlex := tview.NewFlex().SetDirection(tview.FlexRow)
@@ -121,6 +122,7 @@ func NewApp() *App {
 	a.SetInputCapture(a.handleInput)
 	a.SetFocus(a.composer)
 
+	a.applyTheme()
 	return a
 }
 
@@ -164,13 +166,10 @@ func (a *App) handleInput(event *tcell.EventKey) *tcell.EventKey {
 	case event.Key() == tcell.KeyCtrlC:
 		a.Stop()
 		return nil
-	case event.Rune() == 'q' && event.Modifiers() == tcell.ModNone:
-		a.Stop()
-		return nil
 	case event.Key() == tcell.KeyCtrlF:
 		a.enterSearch()
 		return nil
-	case event.Rune() == '?' && event.Modifiers() == tcell.ModNone:
+	case event.Key() == tcell.KeyF1 || event.Key() == tcell.KeyCtrlO:
 		a.enterHelp()
 		return nil
 	case event.Key() == tcell.KeyEnter && event.Modifiers() == tcell.ModNone:
@@ -216,6 +215,35 @@ func (a *App) handleInput(event *tcell.EventKey) *tcell.EventKey {
 			}
 		}
 		return nil
+	case event.Key() == tcell.KeyCtrlN:
+		a.newSession()
+		return nil
+	case event.Key() == tcell.KeyCtrlW:
+		a.closeSession()
+		return nil
+	case event.Key() == tcell.KeyCtrlR:
+		a.renameSession()
+		return nil
+	case event.Key() == tcell.KeyTab:
+		a.nextSession()
+		return nil
+	case event.Key() == tcell.KeyBacktab:
+		a.prevSession()
+		return nil
+	case event.Key() == tcell.KeyCtrlT:
+		if s := a.activeSessionPtr(); s != nil {
+			s.ToggleThinking()
+		}
+		return nil
+	case event.Key() == tcell.KeyCtrlY:
+		if s := a.activeSessionPtr(); s != nil {
+			s.ToggleCollapse()
+		}
+		return nil
+	case event.Key() == tcell.KeyCtrlK:
+		a.themeService.NextTheme()
+		a.applyTheme()
+		return nil
 	case event.Modifiers()&tcell.ModAlt != 0:
 		switch event.Rune() {
 		case 'n', 'N':
@@ -248,7 +276,6 @@ func (a *App) handleInput(event *tcell.EventKey) *tcell.EventKey {
 			a.applyTheme()
 			return nil
 		}
-		// Alt+{1-9} session switching
 		if event.Rune() >= '1' && event.Rune() <= '9' {
 			idx := int(event.Rune() - '1')
 			if idx < len(a.sessions) {
@@ -435,10 +462,9 @@ func (a *App) SetAIAssistant(ai *service.AIAssistant) {
 
 func (a *App) applyTheme() {
 	colors := a.themeService.CurrentTheme().Colors
-	a.statusBar.SetBackgroundColor(hexToTCell(colors.Background))
-	a.chatPanel.ApplyTheme(colors)
-	a.composer.SetBackgroundColor(hexToTCell(colors.Background))
 	a.composer.SetPromptColor(colors.InputPrompt)
+	a.composer.SetAccentColor(hexToTCell(colors.Accent))
+	a.tabDock.SetColors(tcell.ColorWhite, hexToTCell(colors.Accent), tcell.ColorGray, tcell.ColorDefault)
 }
 
 // Loading state (for tests)

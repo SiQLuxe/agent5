@@ -1,7 +1,6 @@
 package ui
 
 type KeyMap struct {
-	Quit           rune
 	NewSession     rune
 	CloseSession   rune
 	RenameSession  rune
@@ -21,7 +20,6 @@ type KeyMap struct {
 
 func DefaultKeyMap() KeyMap {
 	return KeyMap{
-		Quit:           'q',
 		NewSession:     'n',
 		CloseSession:   'w',
 		RenameSession:  'r',
@@ -31,7 +29,7 @@ func DefaultKeyMap() KeyMap {
 		ToggleCollapse: 'y',
 		Search:         '/',
 		ToggleTheme:    'T',
-		ShowHelp:       '?',
+		ShowHelp:       0, // F1 handled via tcell.KeyF1
 		ScrollUp:       "pgup",
 		ScrollDown:     "pgdn",
 		ScrollTop:      'g',
@@ -42,27 +40,28 @@ func DefaultKeyMap() KeyMap {
 
 func (k KeyMap) ShortHelp() []string {
 	return []string{
-		"Ctrl+Enter: Send",
-		"Alt+N: New",
-		"Alt+W: Close",
-		"?: Help",
+		"Enter: Send",
+		"Ctrl+N/Alt+N: New",
+		"Ctrl+W/Alt+W: Close",
+		"Tab/Alt+.: Switch",
 	}
 }
 
 func (k KeyMap) FullHelp() []string {
 	return []string{
-		"Ctrl+Enter   Send message",
-		"Alt+N        New session",
-		"Alt+W        Close session",
-		"Alt+R        Rename session",
-		"Alt+.        Next session",
-		"Alt+,        Previous session",
-		"Alt+T        Toggle thinking",
-		"Alt+Y        Toggle collapse",
-		"/            Search",
-		"Alt+Shift+T  Toggle theme",
-		"PgUp/PgDn    Scroll chat",
-		"g/G          Scroll top/bottom",
-		"q            Quit",
+		"Enter         Send message",
+		"Ctrl+N/Alt+N  New session",
+		"Ctrl+W/Alt+W  Close session",
+		"Ctrl+R/Alt+R  Rename session",
+		"Tab/Alt+.     Next session",
+		"Shift+Tab     Previous session (Alt+,)",
+		"Ctrl+T/Alt+T  Toggle thinking",
+		"Ctrl+Y/Alt+Y  Toggle collapse",
+		"Ctrl+F        Search chat",
+		"Ctrl+K/Alt+S  Toggle theme",
+		"Ctrl+O        Help",
+		"PgUp/PgDn     Scroll chat",
+		"g/G           Scroll top/bottom",
+		"Ctrl+C        Quit",
 	}
 }

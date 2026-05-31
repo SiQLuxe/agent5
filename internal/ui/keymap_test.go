@@ -6,8 +6,8 @@ import (
 
 func TestDefaultKeyMap(t *testing.T) {
 	km := DefaultKeyMap()
-	if km.Quit == 0 {
-		t.Fatal("expected non-zero quit rune")
+	if km.NewSession == 0 {
+		t.Fatal("expected non-zero key map")
 	}
 	if km.SendMessage == "" {
 		t.Fatal("expected non-empty SendMessage")

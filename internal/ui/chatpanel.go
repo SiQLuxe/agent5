@@ -24,6 +24,7 @@ func NewChatPanel() *ChatPanel {
 	c.SetScrollable(true)
 	c.SetWordWrap(true)
 	c.SetRegions(true)
+	c.SetTextStyle(tcell.StyleDefault.Background(tcell.ColorDefault))
 	return c
 }
 
@@ -118,7 +119,6 @@ func (c *ChatPanel) CurrentMatch() int {
 }
 
 func (c *ChatPanel) ApplyTheme(colors ColorPalette) {
-	c.SetBackgroundColor(hexToTCell(colors.Background))
 }
 
 func (c *ChatPanel) clearHighlights() {

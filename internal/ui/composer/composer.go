@@ -9,8 +9,10 @@ import (
 
 type Composer struct {
 	*tview.Flex
-	textArea *tview.TextArea
-	prompt   *tview.TextView
+	textArea    *tview.TextArea
+	prompt      *tview.TextView
+	leftBorder  *tview.Box
+	accentColor tcell.Color
 }
 
 func New() *Composer {
@@ -25,19 +27,35 @@ func New() *Composer {
 	prompt.SetText("> ")
 	prompt.SetDynamicColors(true)
 
+	leftBorder := tview.NewBox()
+	leftBorder.SetBackgroundColor(tcell.ColorDefault)
+
+	c := &Composer{
+		textArea:   textArea,
+		prompt:     prompt,
+		leftBorder: leftBorder,
+	}
+
+	leftBorder.SetDrawFunc(func(screen tcell.Screen, x, y, width, height int) (int, int, int, int) {
+		style := tcell.StyleDefault.Background(c.accentColor)
+		for row := 0; row < height; row++ {
+			screen.SetContent(x, y+row, ' ', nil, style)
+		}
+		return x, y, width, height
+	})
+
 	flex := tview.NewFlex().SetDirection(tview.FlexColumn)
+	flex.AddItem(leftBorder, 1, 0, false)
 	flex.AddItem(prompt, 2, 0, false)
 	flex.AddItem(textArea, 0, 1, true)
 
 	textArea.SetBackgroundColor(tcell.ColorDefault)
 	prompt.SetBackgroundColor(tcell.ColorDefault)
+	leftBorder.SetBackgroundColor(tcell.ColorDefault)
 	flex.SetBackgroundColor(tcell.ColorDefault)
 
-	return &Composer{
-		Flex:     flex,
-		textArea: textArea,
-		prompt:   prompt,
-	}
+	c.Flex = flex
+	return c
 }
 
 func (c *Composer) SetInput(s string) {
@@ -56,7 +74,12 @@ func (c *Composer) SetPromptColor(color string) {
 	c.prompt.SetText(fmt.Sprintf("[%s::b]> [-]", color))
 }
 
+func (c *Composer) SetAccentColor(color tcell.Color) {
+	c.accentColor = color
+}
+
 func (c *Composer) SetBackgroundColor(color tcell.Color) {
 	c.textArea.SetBackgroundColor(color)
 	c.prompt.SetBackgroundColor(color)
+	c.leftBorder.SetBackgroundColor(color)
 }

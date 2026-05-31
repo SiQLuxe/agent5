@@ -28,8 +28,8 @@ func New() *TabDock {
 		tabs:       []Tab{},
 		active:     0,
 		bgColor:    tcell.ColorDefault,
-		activeFg:   tcell.ColorWhite,
-		activeBg:   tcell.ColorBlue,
+		activeFg:   tcell.ColorDefault,
+		activeBg:   tcell.ColorDefault,
 		inactiveFg: tcell.ColorGray,
 		inactiveBg: tcell.ColorDefault,
 	}
