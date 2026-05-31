@@ -17,6 +17,9 @@ func New() *Composer {
 	textArea := tview.NewTextArea()
 	textArea.SetWordWrap(true)
 	textArea.SetSize(8, 0)
+	textArea.SetTextStyle(tcell.StyleDefault.Background(tcell.ColorDefault))
+	textArea.SetPlaceholderStyle(tcell.StyleDefault.Background(tcell.ColorDefault))
+	textArea.SetSelectedStyle(tcell.StyleDefault.Background(tcell.ColorDefault))
 
 	prompt := tview.NewTextView()
 	prompt.SetText("> ")
@@ -25,6 +28,10 @@ func New() *Composer {
 	flex := tview.NewFlex().SetDirection(tview.FlexColumn)
 	flex.AddItem(prompt, 2, 0, false)
 	flex.AddItem(textArea, 0, 1, true)
+
+	textArea.SetBackgroundColor(tcell.ColorDefault)
+	prompt.SetBackgroundColor(tcell.ColorDefault)
+	flex.SetBackgroundColor(tcell.ColorDefault)
 
 	return &Composer{
 		Flex:     flex,
@@ -46,7 +53,7 @@ func (c *Composer) ClearInput() {
 }
 
 func (c *Composer) SetPromptColor(color string) {
-	c.prompt.SetText(fmt.Sprintf("[%s]> [-]", color))
+	c.prompt.SetText(fmt.Sprintf("[%s::b]> [-]", color))
 }
 
 func (c *Composer) SetBackgroundColor(color tcell.Color) {
