@@ -37,9 +37,9 @@ func New() *Composer {
 	}
 
 	leftBorder.SetDrawFunc(func(screen tcell.Screen, x, y, width, height int) (int, int, int, int) {
-		style := tcell.StyleDefault.Background(c.accentColor)
+		style := tcell.StyleDefault.Foreground(c.accentColor)
 		for row := 0; row < height; row++ {
-			screen.SetContent(x, y+row, ' ', nil, style)
+			screen.SetContent(x, y+row, '│', nil, style)
 		}
 		return x, y, width, height
 	})
