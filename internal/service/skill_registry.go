@@ -113,6 +113,16 @@ func (r *SkillRegistry) Unregister(name string) {
 	delete(r.handlers, name)
 }
 
+func (r *SkillRegistry) ClearPrompts() {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	for name, skill := range r.skills {
+		if skill.Type == SkillPrompt {
+			delete(r.skills, name)
+		}
+	}
+}
+
 func (r *SkillRegistry) IsHandler(name string) bool {
 	r.mu.RLock()
 	defer r.mu.RUnlock()

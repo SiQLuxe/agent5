@@ -63,6 +63,16 @@ func (r *CommandRegistry) ListByCategory(cat CommandCategory) []*Command {
 	return out
 }
 
+func (r *CommandRegistry) ClearCategory(cat CommandCategory) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	for name, cmd := range r.commands {
+		if cmd.Category == cat {
+			delete(r.commands, name)
+		}
+	}
+}
+
 func (r *CommandRegistry) SyncSkills(registry *SkillRegistry) {
 	skills := registry.List()
 	for _, s := range skills {

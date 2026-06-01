@@ -129,6 +129,30 @@ func TestLoadSkillsNoSKILLMD(t *testing.T) {
 	}
 }
 
+func TestLoadSkillsDirRecursive(t *testing.T) {
+	baseDir := t.TempDir()
+	writeFixture(t, filepath.Join(baseDir, "code-review", "SKILL.md"),
+		"---\nname: code-review\ndescription: Review\n---\nbody")
+	writeFixture(t, filepath.Join(baseDir, "debug", "test", "SKILL.md"),
+		"---\nname: test\ndescription: Test\n---\nbody")
+	writeFixture(t, filepath.Join(baseDir, "debug", "SKILL.md"),
+		"---\nname: debug\ndescription: Debug\n---\nbody")
+
+	r := NewSkillRegistry()
+	if err := LoadSkillsDir(r, baseDir); err != nil {
+		t.Fatalf("LoadSkillsDir: %v", err)
+	}
+	if _, ok := r.Get("code-review"); !ok {
+		t.Fatal("code-review not found")
+	}
+	if _, ok := r.Get("debug"); !ok {
+		t.Fatal("debug not found")
+	}
+	if _, ok := r.Get("test"); !ok {
+		t.Fatal("nested test not found")
+	}
+}
+
 func TestLoadSkillsAutoDetectHandler(t *testing.T) {
 	baseDir := t.TempDir()
 	writeFixture(t, filepath.Join(baseDir, "ping", "SKILL.md"),

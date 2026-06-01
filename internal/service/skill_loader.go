@@ -47,28 +47,35 @@ func parseFrontmatter(input string) (name, description, body string, err error) 
 }
 
 func LoadSkillsDir(registry *SkillRegistry, dir string) error {
-	entries, err := os.ReadDir(dir)
+	info, err := os.Stat(dir)
 	if err != nil {
 		if os.IsNotExist(err) {
 			return nil
 		}
 		return err
 	}
-	for _, entry := range entries {
-		if !entry.IsDir() {
-			continue
-		}
-		skillPath := filepath.Join(dir, entry.Name(), "SKILL.md")
-		data, err := os.ReadFile(skillPath)
+	if !info.IsDir() {
+		return nil
+	}
+
+	return filepath.Walk(dir, func(path string, fi os.FileInfo, err error) error {
 		if err != nil {
-			continue
+			return nil
+		}
+		if fi.IsDir() || fi.Name() != "SKILL.md" {
+			return nil
+		}
+		parentDir := filepath.Base(filepath.Dir(path))
+		data, err := os.ReadFile(path)
+		if err != nil {
+			return nil
 		}
 		name, desc, body, err := parseFrontmatter(string(data))
 		if err != nil {
-			continue
+			return nil
 		}
-		if name != entry.Name() {
-			continue
+		if name != parentDir {
+			return nil
 		}
 		skillType := SkillPrompt
 		if registry.IsHandler(name) {
@@ -80,6 +87,6 @@ func LoadSkillsDir(registry *SkillRegistry, dir string) error {
 			Type:        skillType,
 			Prompt:      body,
 		})
-	}
-	return nil
+		return nil
+	})
 }
