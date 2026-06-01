@@ -26,15 +26,18 @@ func main() {
 
 	h := history.NewHistory("")
 	aiAssistant := service.NewAIAssistant(aiClient, h)
-
-	app := ui.NewApp()
-	app.SetAIAssistant(aiAssistant)
-
 	skillRegistry := service.NewSkillRegistry()
 	if err := service.LoadSkillsDir(skillRegistry, "skills"); err != nil {
 		log.Printf("warning: loading skills: %v", err)
 	}
-	app.SetSkillRegistry(skillRegistry)
+	skillExecutor := service.NewSkillExecutor(skillRegistry, aiAssistant)
+
+	app := ui.NewApp()
+	app.SetAIAssistant(aiAssistant)
+	app.SetSkillExecutor(skillExecutor)
+
+	// Sync skills into command registry
+	app.CommandRegistry().SyncSkills(skillRegistry)
 
 	app.AddWelcomeMessage()
 

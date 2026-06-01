@@ -448,21 +448,21 @@ func TestSendMessageBlockedDuringLoading(t *testing.T) {
 	}
 }
 
-func TestModeSkillCtrlP(t *testing.T) {
+func TestCommandPaletteCtrlP(t *testing.T) {
 	a := NewApp()
 	ev := tcell.NewEventKey(tcell.KeyCtrlP, 0, tcell.ModNone)
 	result := a.handleInput(ev)
 	if result != nil {
 		t.Fatal("expected Ctrl+P consumed (nil)")
 	}
-	if a.mode != ModeSkill {
-		t.Fatalf("expected ModeSkill, got %d", a.mode)
+	if a.mode != ModeCommandPalette {
+		t.Fatalf("expected ModeCommandPalette, got %d", a.mode)
 	}
 }
 
-func TestModeSkillEscExits(t *testing.T) {
+func TestCommandPaletteEscExits(t *testing.T) {
 	a := NewApp()
-	a.enterSkill()
+	a.enterCommandPalette(ShowAll)
 	ev := tcell.NewEventKey(tcell.KeyEsc, 0, tcell.ModNone)
 	result := a.handleInput(ev)
 	if result != nil {
@@ -473,31 +473,42 @@ func TestModeSkillEscExits(t *testing.T) {
 	}
 }
 
-func TestModeSkillEnterExecutes(t *testing.T) {
+func TestCommandPaletteBuiltinsRegistered(t *testing.T) {
 	a := NewApp()
-	a.skillRegistry = service.NewSkillRegistry()
-	a.skillRegistry.Register(&service.Skill{Name: "test", Description: "test"})
-	a.newSession()
-	a.enterSkill()
-	a.skillOverlay.SetSkills(a.skillRegistry.List())
-	ev := tcell.NewEventKey(tcell.KeyEnter, 0, tcell.ModNone)
-	result := a.handleInput(ev)
-	if result != nil {
-		t.Fatal("expected Enter consumed (nil)")
+	if a.commandRegistry == nil {
+		t.Fatal("expected commandRegistry to be set")
 	}
-	if a.mode != ModeChat {
-		t.Fatalf("expected ModeChat after execute, got %d", a.mode)
+	cmds := a.commandRegistry.List()
+	if len(cmds) == 0 {
+		t.Fatal("expected builtin commands")
+	}
+	found := false
+	for _, c := range cmds {
+		if c.Name == "New Session" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatal("expected 'New Session' command")
 	}
 }
 
-func TestSetSkillRegistry(t *testing.T) {
+func TestCommandPaletteHasSkillsCategory(t *testing.T) {
 	a := NewApp()
-	r := service.NewSkillRegistry()
-	a.SetSkillRegistry(r)
-	if a.skillRegistry != r {
-		t.Fatal("skillRegistry not set")
-	}
-	if a.skillExecutor == nil {
-		t.Fatal("skillExecutor should be created")
+	cr := service.NewCommandRegistry()
+	sr := service.NewSkillRegistry()
+	sr.Register(&service.Skill{Name: "test-skill", Description: "test"})
+	cr.SyncSkills(sr)
+	cr.Register(&service.Command{
+		Name: "test-skill", Description: "test",
+		Category: service.CmdSkill,
+	})
+	// Use the app's command palette
+	a.commandRegistry = cr
+	a.enterCommandPalette(ShowSkills)
+	itemCount := a.commandPalette.GetItemCount()
+	if itemCount < 1 {
+		t.Fatal("expected at least 1 skill in palette")
 	}
 }

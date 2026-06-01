@@ -19,7 +19,7 @@ const (
 	ModeChat AppMode = iota
 	ModeSearch
 	ModeHelp
-	ModeSkill
+	ModeCommandPalette
 )
 
 type App struct {
@@ -42,10 +42,10 @@ type App struct {
 	aiAssistant  *service.AIAssistant
 	inputHistory []string
 	historyIndex int
-	skillOverlay   *SkillOverlay
-	skillRegistry  *service.SkillRegistry
-	skillExecutor  *service.SkillExecutor
-	pendingSlash   bool
+	commandPalette  *CommandPalette
+	commandRegistry *service.CommandRegistry
+	skillExecutor   *service.SkillExecutor
+	slashDetected   bool
 }
 
 func NewApp() *App {
@@ -88,16 +88,15 @@ func NewApp() *App {
 	a.helpView.SetTitle(" Help ")
 	a.helpView.SetTextStyle(tcell.StyleDefault.Background(tcell.ColorDefault))
 
-	// Build layout: StatusBar + ChatPanel + Composer + TabDock
+	// Build layout: StatusBar + ChatPanel + [CommandPalette] + Composer + TabDock
 	chatFlex := tview.NewFlex().SetDirection(tview.FlexRow)
 	chatFlex.AddItem(a.statusBar, 1, 0, false)
 	chatFlex.AddItem(a.chatPanel, 0, 1, false)
+	a.commandPalette = NewCommandPalette()
+	chatFlex.AddItem(a.commandPalette, 0, 0, false) // hidden by default
 	chatFlex.AddItem(a.composer, 3, 0, true)
 	chatFlex.AddItem(a.tabDock, 1, 0, false)
 	a.chatFlex = chatFlex
-
-	a.skillOverlay = NewSkillOverlay()
-	a.chatFlex.AddItem(a.skillOverlay, 0, 0, false)
 
 	// Search overlay: centered box with InputField + status
 	searchFlex := tview.NewFlex().SetDirection(tview.FlexRow)
@@ -126,6 +125,25 @@ func NewApp() *App {
 	a.pages.AddPage("search", searchPage, true, false)
 	a.pages.AddPage("help", helpFlex, true, false)
 
+	// Register builtin commands
+	a.registerBuiltinCommands()
+
+	// Immediate slash detection
+	a.SetBeforeDrawFunc(func(screen tcell.Screen) bool {
+		if a.mode == ModeChat && a.composer != nil {
+			text := a.composer.GetInput()
+			if len(text) > 0 && text[0] == '/' {
+				if !a.slashDetected {
+					a.slashDetected = true
+					a.enterCommandPalette(ShowSkills)
+				}
+			} else {
+				a.slashDetected = false
+			}
+		}
+		return false
+	})
+
 	a.SetRoot(a.pages, true)
 	a.SetInputCapture(a.handleInput)
 	a.SetFocus(a.composer)
@@ -135,15 +153,6 @@ func NewApp() *App {
 }
 
 func (a *App) handleInput(event *tcell.EventKey) *tcell.EventKey {
-	if a.pendingSlash {
-		a.pendingSlash = false
-		text := a.composer.GetInput()
-		if strings.HasPrefix(text, "/") {
-			a.enterSkill()
-			return nil
-		}
-	}
-
 	switch a.mode {
 	case ModeHelp:
 		if event.Key() == tcell.KeyEsc || event.Key() == tcell.KeyEnter {
@@ -176,23 +185,26 @@ func (a *App) handleInput(event *tcell.EventKey) *tcell.EventKey {
 			}
 			return nil
 		}
-	case ModeSkill:
+	case ModeCommandPalette:
 		if event.Key() == tcell.KeyEnter {
-			name := a.skillOverlay.SelectedSkillName()
-			if name != "" {
-				a.executeSkill(name)
+			cmd := a.commandPalette.SelectedCommand()
+			if cmd != nil {
+				a.executeCommand(cmd)
 			}
 			return nil
 		}
 		if event.Key() == tcell.KeyEsc {
-			a.exitSkill()
+			a.exitCommandPalette()
 			return nil
 		}
 		if event.Key() == tcell.KeyTab {
-			name := a.skillOverlay.SelectedSkillName()
-			if name != "" {
-				a.composer.SetInput("/" + name)
-				a.executeSkill(name)
+			cmd := a.commandPalette.SelectedCommand()
+			if cmd != nil {
+				text := a.composer.GetInput()
+				if len(text) > 0 && text[0] == '/' {
+					a.composer.SetInput("/" + cmd.Name + " ")
+				}
+				a.executeCommand(cmd)
 			}
 			return nil
 		}
@@ -211,7 +223,7 @@ func (a *App) handleInput(event *tcell.EventKey) *tcell.EventKey {
 		a.enterHelp()
 		return nil
 	case event.Key() == tcell.KeyCtrlP:
-		a.enterSkill()
+		a.enterCommandPalette(ShowAll)
 		return nil
 	case event.Key() == tcell.KeyEnter && event.Modifiers() == tcell.ModNone:
 		if a.isLoading {
@@ -324,9 +336,6 @@ func (a *App) handleInput(event *tcell.EventKey) *tcell.EventKey {
 			}
 			return nil
 		}
-	case event.Rune() == '/' && a.mode == ModeChat:
-		a.pendingSlash = true
-		return event
 	}
 
 	return event
@@ -500,9 +509,6 @@ func (a *App) AddWelcomeMessage() {
 
 func (a *App) SetAIAssistant(ai *service.AIAssistant) {
 	a.aiAssistant = ai
-	if a.skillRegistry != nil {
-		a.skillExecutor = service.NewSkillExecutor(a.skillRegistry, ai)
-	}
 }
 
 // Theme
@@ -561,49 +567,60 @@ func (a *App) GetComposerInput() string {
 	return a.composer.GetInput()
 }
 
-func (a *App) SetSkillRegistry(registry *service.SkillRegistry) {
-	a.skillRegistry = registry
-	if registry != nil {
-		a.skillExecutor = service.NewSkillExecutor(registry, a.aiAssistant)
-	}
+func (a *App) CommandRegistry() *service.CommandRegistry {
+	return a.commandRegistry
 }
 
-func (a *App) enterSkill() {
-	a.mode = ModeSkill
-	a.pendingSlash = false
-	if a.skillRegistry != nil {
-		a.skillOverlay.SetSkills(a.skillRegistry.List())
-	}
-	a.chatFlex.RemoveItem(a.skillOverlay)
-	a.chatFlex.AddItem(a.skillOverlay, 5, 0, false)
-	a.SetFocus(a.skillOverlay)
+func (a *App) SetSkillExecutor(executor *service.SkillExecutor) {
+	a.skillExecutor = executor
 }
 
-func (a *App) exitSkill() {
+func (a *App) enterCommandPalette(mode PaletteMode) {
+	a.mode = ModeCommandPalette
+	if a.commandRegistry != nil {
+		cmds := a.commandRegistry.List()
+		a.commandPalette.SetCommands(cmds)
+	}
+	a.commandPalette.SetMode(mode)
+	a.chatFlex.RemoveItem(a.commandPalette)
+	a.chatFlex.AddItem(a.commandPalette, 6, 0, false)
+	a.SetFocus(a.commandPalette)
+}
+
+func (a *App) exitCommandPalette() {
 	a.mode = ModeChat
-	a.chatFlex.RemoveItem(a.skillOverlay)
-	a.chatFlex.AddItem(a.skillOverlay, 0, 0, false)
+	a.chatFlex.RemoveItem(a.commandPalette)
+	a.chatFlex.AddItem(a.commandPalette, 0, 0, false)
 	a.SetFocus(a.composer)
+}
+
+func (a *App) executeCommand(cmd *service.Command) {
+	a.mode = ModeChat
+	a.chatFlex.RemoveItem(a.commandPalette)
+	a.chatFlex.AddItem(a.commandPalette, 0, 0, false)
+	a.SetFocus(a.composer)
+
+	switch cmd.Category {
+	case service.CmdBuiltin:
+		cmd.Action(a.composer.GetInput())
+	case service.CmdSkill:
+		a.executeSkill(cmd.Name)
+	}
 }
 
 func (a *App) executeSkill(name string) {
-	a.mode = ModeChat
-	a.chatFlex.RemoveItem(a.skillOverlay)
-	a.chatFlex.AddItem(a.skillOverlay, 0, 0, false)
-	a.SetFocus(a.composer)
-
 	if a.skillExecutor == nil || a.activeSession < 0 {
 		return
 	}
 
 	s := a.sessions[a.activeSession]
 	text := a.composer.GetInput()
-	cmd := service.ParseCommand(text)
-	if cmd == nil {
-		cmd = &service.ParsedCommand{Name: name}
+	pc := service.ParseCommand(text)
+	if pc == nil {
+		pc = &service.ParsedCommand{Name: name}
 	}
 
-	result, err := a.skillExecutor.Execute(cmd)
+	result, err := a.skillExecutor.Execute(pc)
 	if err != nil {
 		s.AddMessage(RoleSkill, "Error: "+err.Error())
 	} else {
@@ -612,4 +629,59 @@ func (a *App) executeSkill(name string) {
 	s.Messages[len(s.Messages)-1].Label = name
 	a.composer.ClearInput()
 	a.chatPanel.SetSession(s)
+}
+
+func (a *App) registerBuiltinCommands() {
+	r := service.NewCommandRegistry()
+
+	r.Register(&service.Command{
+		Name:        "New Session",
+		Description: "Create a new chat session",
+		Category:    service.CmdBuiltin,
+		Action:      func(string) { a.newSession() },
+	})
+	r.Register(&service.Command{
+		Name:        "Search",
+		Description: "Search messages in current session",
+		Category:    service.CmdBuiltin,
+		Action:      func(string) { a.enterSearch() },
+	})
+	r.Register(&service.Command{
+		Name:        "Toggle Thinking",
+		Description: "Expand or collapse thinking blocks",
+		Category:    service.CmdBuiltin,
+		Action:      func(string) { if s := a.activeSessionPtr(); s != nil { s.ToggleThinking() } },
+	})
+	r.Register(&service.Command{
+		Name:        "Toggle Collapse",
+		Description: "Collapse or expand the last message",
+		Category:    service.CmdBuiltin,
+		Action:      func(string) { if s := a.activeSessionPtr(); s != nil { s.ToggleCollapse() } },
+	})
+	r.Register(&service.Command{
+		Name:        "Next Theme",
+		Description: "Switch to the next color theme",
+		Category:    service.CmdBuiltin,
+		Action:      func(string) { a.themeService.NextTheme(); a.applyTheme() },
+	})
+	r.Register(&service.Command{
+		Name:        "Next Session",
+		Description: "Switch to the next session tab",
+		Category:    service.CmdBuiltin,
+		Action:      func(string) { a.nextSession() },
+	})
+	r.Register(&service.Command{
+		Name:        "Close Session",
+		Description: "Close the current session",
+		Category:    service.CmdBuiltin,
+		Action:      func(string) { a.closeSession() },
+	})
+	r.Register(&service.Command{
+		Name:        "Help",
+		Description: "Show keyboard shortcuts",
+		Category:    service.CmdBuiltin,
+		Action:      func(string) { a.enterHelp() },
+	})
+
+	a.commandRegistry = r
 }
