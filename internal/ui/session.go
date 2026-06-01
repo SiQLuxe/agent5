@@ -14,6 +14,7 @@ const (
 	RoleUser Role = iota
 	RoleAssistant
 	RoleSystem
+	RoleSkill
 )
 
 func (r Role) String() string {
@@ -24,6 +25,8 @@ func (r Role) String() string {
 		return "assistant"
 	case RoleSystem:
 		return "system"
+	case RoleSkill:
+		return "skill"
 	default:
 		return "unknown"
 	}
@@ -38,6 +41,7 @@ type Thinking struct {
 type Message struct {
 	Role      Role
 	Content   string
+	Label     string
 	Thinking  *Thinking
 	Timestamp time.Time
 	Collapsed bool // whether message content is folded
@@ -167,6 +171,18 @@ func renderMessageToBuilder(sb *strings.Builder, msg Message, width int, theme C
 		sb.WriteString(ts)
 		sb.WriteString("\n")
 		renderContent(sb, msg.Content, msg.Collapsed, width, theme, 1)
+
+	case RoleSkill:
+		label := msg.Label
+		if label == "" {
+			label = "skill"
+		}
+		badge := fmt.Sprintf("[%s:%s:b] \u2699 %s [-:-:-]", theme.Accent, theme.PanelBg, label)
+		sb.WriteString(badge)
+		sb.WriteString(" ")
+		sb.WriteString(ts)
+		sb.WriteString("\n")
+		renderContent(sb, msg.Content, false, width, theme, 1)
 	}
 
 	sb.WriteString("\n")
