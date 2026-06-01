@@ -344,12 +344,84 @@ func TestShortcutCloseSession_CtrlW(t *testing.T) {
 	}
 }
 
-func TestShortcutRenameSession_CtrlR_NoPanic(t *testing.T) {
+func TestRenameSession(t *testing.T) {
 	a := NewApp()
+	a.newSession()
+	s := a.activeSessionPtr()
+	s.Label = "Old Name"
+
+	a.enterRename()
+	if a.mode != ModeRename {
+		t.Fatalf("expected ModeRename, got %d", a.mode)
+	}
+	if a.renameInput.GetText() != "Old Name" {
+		t.Fatalf("expected 'Old Name', got %q", a.renameInput.GetText())
+	}
+}
+
+func TestRenameSessionApply(t *testing.T) {
+	a := NewApp()
+	a.newSession()
+	s := a.activeSessionPtr()
+	s.Label = "Old Name"
+
+	a.enterRename()
+	a.renameInput.SetText("New Name")
+	a.applyRename()
+
+	if a.mode != ModeChat {
+		t.Fatalf("expected ModeChat after rename, got %d", a.mode)
+	}
+	if s.Label != "New Name" {
+		t.Fatalf("expected 'New Name', got %q", s.Label)
+	}
+}
+
+func TestRenameSessionCancel(t *testing.T) {
+	a := NewApp()
+	a.newSession()
+	s := a.activeSessionPtr()
+	s.Label = "Original"
+
+	a.enterRename()
+	a.renameInput.SetText("Changed")
+	a.exitRename()
+
+	if a.mode != ModeChat {
+		t.Fatalf("expected ModeChat after exit, got %d", a.mode)
+	}
+	if s.Label != "Original" {
+		t.Fatalf("expected unchanged label 'Original', got %q", s.Label)
+	}
+}
+
+func TestRenameSessionEmptyName(t *testing.T) {
+	a := NewApp()
+	a.newSession()
+	s := a.activeSessionPtr()
+	s.Label = "Old"
+
+	a.enterRename()
+	a.renameInput.SetText("")
+	a.applyRename()
+
+	if s.Label != "New Session" {
+		t.Fatalf("expected default 'New Session', got %q", s.Label)
+	}
+}
+
+func TestShortcutRenameSession_CtrlR(t *testing.T) {
+	a := NewApp()
+	a.newSession()
+	s := a.activeSessionPtr()
+	s.Label = "Test Session"
 	ev := tcell.NewEventKey(tcell.KeyCtrlR, 0, tcell.ModNone)
 	result := a.handleInput(ev)
 	if result != nil {
 		t.Fatal("expected Ctrl+R to be consumed (nil)")
+	}
+	if a.mode != ModeRename {
+		t.Fatalf("expected ModeRename, got %d", a.mode)
 	}
 }
 

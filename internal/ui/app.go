@@ -20,6 +20,7 @@ const (
 	ModeSearch
 	ModeHelp
 	ModeCommandPalette
+	ModeRename
 )
 
 type App struct {
@@ -45,7 +46,8 @@ type App struct {
 	commandPalette  *CommandPalette
 	commandRegistry *service.CommandRegistry
 	skillExecutor   *service.SkillExecutor
-
+	renameInput     *tview.InputField
+	renamePage      *tview.Flex
 }
 
 func NewApp() *App {
@@ -125,6 +127,24 @@ func NewApp() *App {
 	a.pages.AddPage("search", searchPage, true, false)
 	a.pages.AddPage("help", helpFlex, true, false)
 
+	// Rename overlay
+	a.renameInput = tview.NewInputField()
+	a.renameInput.SetLabel("Session name: ")
+	a.renameInput.SetFieldWidth(0)
+	renameFlex := tview.NewFlex().SetDirection(tview.FlexRow)
+	renameFlex.AddItem(nil, 0, 1, false)
+	renameInner := tview.NewFlex().SetDirection(tview.FlexRow)
+	renameInner.AddItem(a.renameInput, 1, 0, true)
+	renameInner.AddItem(tview.NewTextView().SetText("[gray]Enter: confirm  Esc: cancel[-]").SetDynamicColors(true).SetTextAlign(tview.AlignCenter), 1, 0, false)
+	renameFlex.AddItem(renameInner, 3, 0, true)
+	renameFlex.AddItem(nil, 0, 1, false)
+	renamePage := tview.NewFlex().SetDirection(tview.FlexColumn)
+	renamePage.AddItem(nil, 0, 1, false)
+	renamePage.AddItem(renameFlex, 50, 0, true)
+	renamePage.AddItem(nil, 0, 1, false)
+	a.renamePage = renamePage
+	a.pages.AddPage("rename", renamePage, true, false)
+
 	// Register builtin commands
 	a.registerBuiltinCommands()
 
@@ -169,6 +189,16 @@ func (a *App) handleInput(event *tcell.EventKey) *tcell.EventKey {
 			}
 			return nil
 		}
+	case ModeRename:
+		if event.Key() == tcell.KeyEnter {
+			a.applyRename()
+			return nil
+		}
+		if event.Key() == tcell.KeyEsc {
+			a.exitRename()
+			return nil
+		}
+		return event
 	case ModeCommandPalette:
 		if event.Key() == tcell.KeyEnter {
 			cmd := a.commandPalette.SelectedCommand()
@@ -410,7 +440,7 @@ func (a *App) closeSession() {
 }
 
 func (a *App) renameSession() {
-	// Placeholder
+	a.enterRename()
 }
 
 func (a *App) nextSession() {
@@ -645,7 +675,43 @@ func (a *App) executeSkill(name string) {
 	a.chatPanel.SetSession(s)
 }
 
-func (a *App) enterRename()   {} // stub — implemented in Task 3
+func (a *App) enterRename() {
+	s := a.activeSessionPtr()
+	if s == nil {
+		return
+	}
+	a.mode = ModeRename
+	a.renameInput.SetText(s.Label)
+	a.pages.SwitchToPage("rename")
+	a.SetFocus(a.renameInput)
+}
+
+func (a *App) applyRename() {
+	s := a.activeSessionPtr()
+	if s == nil {
+		a.exitRename()
+		return
+	}
+	newName := a.renameInput.GetText()
+	if newName == "" {
+		newName = "New Session"
+	}
+	s.Label = newName
+	for i, session := range a.sessions {
+		if session == s {
+			a.tabDock.UpdateTab(i, newName)
+			break
+		}
+	}
+	a.exitRename()
+}
+
+func (a *App) exitRename() {
+	a.mode = ModeChat
+	a.pages.SwitchToPage("chat")
+	a.SetFocus(a.composer)
+}
+
 func (a *App) reloadSkills()  {} // stub — implemented in Task 5
 
 func (a *App) registerBuiltinCommands() {
