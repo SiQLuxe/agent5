@@ -29,6 +29,13 @@ func main() {
 
 	app := ui.NewApp()
 	app.SetAIAssistant(aiAssistant)
+
+	skillRegistry := service.NewSkillRegistry()
+	if err := service.LoadSkillsDir(skillRegistry, "skills"); err != nil {
+		log.Printf("warning: loading skills: %v", err)
+	}
+	app.SetSkillRegistry(skillRegistry)
+
 	app.AddWelcomeMessage()
 
 	if err := app.Run(); err != nil {
