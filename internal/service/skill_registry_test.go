@@ -1,7 +1,6 @@
 package service
 
 import (
-	"os"
 	"testing"
 )
 
@@ -35,7 +34,7 @@ func TestSkillRegistryDuplicate(t *testing.T) {
 	r := NewSkillRegistry()
 	r.Register(&Skill{Name: "dup", Description: "dup"})
 	err := r.Register(&Skill{Name: "dup", Description: "dup"})
-	if err == nil {
+	if err != ErrSkillAlreadyExists {
 		t.Fatal("expected error on duplicate register")
 	}
 }
@@ -48,12 +47,68 @@ func TestSkillRegistryGetNotFound(t *testing.T) {
 	}
 }
 
-func TestSkillRegistryDuplicateErrorIsErrExist(t *testing.T) {
+func TestSkillRegistryDuplicateError(t *testing.T) {
 	r := NewSkillRegistry()
 	r.Register(&Skill{Name: "dup2", Description: "dup2"})
 	err := r.Register(&Skill{Name: "dup2", Description: "dup2"})
-	if !os.IsExist(err) {
-		t.Fatal("expected os.ErrExist for duplicate")
+	if err != ErrSkillAlreadyExists {
+		t.Fatal("expected ErrSkillAlreadyExists for duplicate")
+	}
+}
+
+func TestRegisterNilSkill(t *testing.T) {
+	r := NewSkillRegistry()
+	err := r.Register(nil)
+	if err == nil {
+		t.Fatal("expected error for nil skill")
+	}
+}
+
+func TestRegisterEmptyName(t *testing.T) {
+	r := NewSkillRegistry()
+	err := r.Register(&Skill{Name: "", Description: "empty"})
+	if err == nil {
+		t.Fatal("expected error for empty name")
+	}
+}
+
+func TestRegisterDoesNotMutateCallerSkill(t *testing.T) {
+	r := NewSkillRegistry()
+	r.RegisterHandler("mutation-test", func(ctx SkillContext) string { return "ok" })
+	skill := &Skill{Name: "mutation-test", Description: "test", Type: SkillPrompt}
+	originalType := skill.Type
+	r.Register(skill)
+	if skill.Type != originalType {
+		t.Fatal("Register mutated the caller's Skill.Type")
+	}
+	// But the stored skill should have SkillHandler
+	got, _ := r.Get("mutation-test")
+	if got.Type != SkillHandler {
+		t.Fatal("stored skill should have SkillHandler type")
+	}
+}
+
+func TestHandlerRegistrationReverseOrder(t *testing.T) {
+	r := NewSkillRegistry()
+	r.Register(&Skill{Name: "rev-test", Description: "reverse test"})
+	r.RegisterHandler("rev-test", func(ctx SkillContext) string { return "ok" })
+	got, ok := r.Get("rev-test")
+	if !ok {
+		t.Fatal("skill not found")
+	}
+	if got.Type != SkillHandler {
+		t.Fatalf("expected SkillHandler, got %v", got.Type)
+	}
+}
+
+func TestIsHandler(t *testing.T) {
+	r := NewSkillRegistry()
+	if r.IsHandler("nonexistent") {
+		t.Fatal("expected false for nonexistent handler")
+	}
+	r.RegisterHandler("exists", func(ctx SkillContext) string { return "ok" })
+	if !r.IsHandler("exists") {
+		t.Fatal("expected true for existing handler")
 	}
 }
 
@@ -77,6 +132,23 @@ func TestHandlerRegistration(t *testing.T) {
 	result := fn(SkillContext{Input: "hello"})
 	if result != "pong" {
 		t.Fatalf("expected 'pong', got '%s'", result)
+	}
+}
+
+func TestListContainsAllSkills(t *testing.T) {
+	r := NewSkillRegistry()
+	r.Register(&Skill{Name: "a", Description: "a"})
+	r.Register(&Skill{Name: "b", Description: "b"})
+	got := r.List()
+	if len(got) != 2 {
+		t.Fatalf("len: expected 2, got %d", len(got))
+	}
+	names := make(map[string]bool)
+	for _, s := range got {
+		names[s.Name] = true
+	}
+	if !names["a"] || !names["b"] {
+		t.Fatal("List missing registered skills")
 	}
 }
 

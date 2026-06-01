@@ -1,9 +1,11 @@
 package service
 
 import (
-	"os"
+	"errors"
 	"sync"
 )
+
+var ErrSkillAlreadyExists = errors.New("skill already registered")
 
 type SkillType int
 
@@ -39,18 +41,26 @@ func NewSkillRegistry() *SkillRegistry {
 }
 
 func (r *SkillRegistry) Register(skill *Skill) error {
+	if skill == nil {
+		return errors.New("skill is nil")
+	}
+	if skill.Name == "" {
+		return errors.New("skill name is required")
+	}
+
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
 	if _, exists := r.skills[skill.Name]; exists {
-		return os.ErrExist
+		return ErrSkillAlreadyExists
 	}
 
+	s := *skill
 	if _, handlerExists := r.handlers[skill.Name]; handlerExists {
-		skill.Type = SkillHandler
+		s.Type = SkillHandler
 	}
 
-	r.skills[skill.Name] = skill
+	r.skills[skill.Name] = &s
 	return nil
 }
 
