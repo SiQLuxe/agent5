@@ -1,7 +1,10 @@
 package ui
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/gdamore/tcell/v2"
 	"github.com/google/uuid"
@@ -46,6 +49,8 @@ type App struct {
 	commandPalette  *CommandPalette
 	commandRegistry *service.CommandRegistry
 	skillExecutor   *service.SkillExecutor
+	skillRegistry   *service.SkillRegistry
+	skillsDir       string
 	renameInput     *tview.InputField
 	renamePage      *tview.Flex
 }
@@ -617,6 +622,14 @@ func (a *App) SetSkillExecutor(executor *service.SkillExecutor) {
 	a.skillExecutor = executor
 }
 
+func (a *App) SetSkillRegistry(r *service.SkillRegistry) {
+	a.skillRegistry = r
+}
+
+func (a *App) SetSkillsDir(dir string) {
+	a.skillsDir = dir
+}
+
 func (a *App) enterCommandPalette(mode PaletteMode) {
 	a.mode = ModeCommandPalette
 	if a.commandRegistry != nil {
@@ -712,7 +725,48 @@ func (a *App) exitRename() {
 	a.SetFocus(a.composer)
 }
 
-func (a *App) reloadSkills()  {} // stub — implemented in Task 5
+func (a *App) reloadSkills() {
+	if a.skillRegistry == nil || a.skillsDir == "" {
+		return
+	}
+	if err := service.ReloadSkillsDir(a.skillRegistry, a.skillsDir); err != nil {
+		return
+	}
+	if a.commandRegistry != nil {
+		a.commandRegistry.ClearCategory(service.CmdSkill)
+		a.commandRegistry.SyncSkills(a.skillRegistry)
+	}
+}
+
+func (a *App) StartSkillWatcher() {
+	if a.skillsDir == "" {
+		return
+	}
+	go func() {
+		mtimes := make(map[string]time.Time)
+		ticker := time.NewTicker(5 * time.Second)
+		defer ticker.Stop()
+		for range ticker.C {
+			changed := false
+			filepath.Walk(a.skillsDir, func(path string, fi os.FileInfo, err error) error {
+				if err != nil {
+					return nil
+				}
+				if fi.IsDir() || fi.Name() != "SKILL.md" {
+					return nil
+				}
+				if old, ok := mtimes[path]; !ok || fi.ModTime() != old {
+					changed = true
+					mtimes[path] = fi.ModTime()
+				}
+				return nil
+			})
+			if changed {
+				a.QueueUpdateDraw(func() { a.reloadSkills() })
+			}
+		}
+	}()
+}
 
 func (a *App) registerBuiltinCommands() {
 	r := service.NewCommandRegistry()

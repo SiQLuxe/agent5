@@ -90,3 +90,8 @@ func LoadSkillsDir(registry *SkillRegistry, dir string) error {
 		return nil
 	})
 }
+
+func ReloadSkillsDir(registry *SkillRegistry, dir string) error {
+	registry.ClearPrompts()
+	return LoadSkillsDir(registry, dir)
+}

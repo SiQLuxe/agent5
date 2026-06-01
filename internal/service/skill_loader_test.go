@@ -153,6 +153,36 @@ func TestLoadSkillsDirRecursive(t *testing.T) {
 	}
 }
 
+func TestReloadSkillsDir(t *testing.T) {
+	baseDir := t.TempDir()
+	writeFixture(t, filepath.Join(baseDir, "alpha", "SKILL.md"),
+		"---\nname: alpha\ndescription: Alpha\n---\nOriginal")
+	r := NewSkillRegistry()
+	LoadSkillsDir(r, baseDir)
+	if _, ok := r.Get("alpha"); !ok {
+		t.Fatal("alpha not loaded")
+	}
+
+	writeFixture(t, filepath.Join(baseDir, "alpha", "SKILL.md"),
+		"---\nname: alpha\ndescription: Alpha updated\n---\nUpdated body")
+	writeFixture(t, filepath.Join(baseDir, "beta", "SKILL.md"),
+		"---\nname: beta\ndescription: Beta\n---\nNew skill")
+
+	if err := ReloadSkillsDir(r, baseDir); err != nil {
+		t.Fatalf("ReloadSkillsDir: %v", err)
+	}
+	s, ok := r.Get("alpha")
+	if !ok {
+		t.Fatal("alpha missing after reload")
+	}
+	if s.Prompt != "Updated body" {
+		t.Fatalf("expected updated body, got %q", s.Prompt)
+	}
+	if _, ok := r.Get("beta"); !ok {
+		t.Fatal("beta not found after reload")
+	}
+}
+
 func TestLoadSkillsAutoDetectHandler(t *testing.T) {
 	baseDir := t.TempDir()
 	writeFixture(t, filepath.Join(baseDir, "ping", "SKILL.md"),

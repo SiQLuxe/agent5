@@ -35,10 +35,13 @@ func main() {
 	app := ui.NewApp()
 	app.SetAIAssistant(aiAssistant)
 	app.SetSkillExecutor(skillExecutor)
+	app.SetSkillRegistry(skillRegistry)
+	app.SetSkillsDir("skills")
 
 	// Sync skills into command registry
 	app.CommandRegistry().SyncSkills(skillRegistry)
 
+	app.StartSkillWatcher()
 	app.AddWelcomeMessage()
 
 	if err := app.Run(); err != nil {
