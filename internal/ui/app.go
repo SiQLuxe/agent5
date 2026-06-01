@@ -19,6 +19,7 @@ const (
 	ModeChat AppMode = iota
 	ModeSearch
 	ModeHelp
+	ModeSkill
 )
 
 type App struct {
@@ -41,6 +42,10 @@ type App struct {
 	aiAssistant  *service.AIAssistant
 	inputHistory []string
 	historyIndex int
+	skillOverlay   *SkillOverlay
+	skillRegistry  *service.SkillRegistry
+	skillExecutor  *service.SkillExecutor
+	pendingSlash   bool
 }
 
 func NewApp() *App {
@@ -91,6 +96,9 @@ func NewApp() *App {
 	chatFlex.AddItem(a.tabDock, 1, 0, false)
 	a.chatFlex = chatFlex
 
+	a.skillOverlay = NewSkillOverlay()
+	a.chatFlex.AddItem(a.skillOverlay, 0, 0, false)
+
 	// Search overlay: centered box with InputField + status
 	searchFlex := tview.NewFlex().SetDirection(tview.FlexRow)
 	searchFlex.AddItem(nil, 0, 1, false)
@@ -127,6 +135,15 @@ func NewApp() *App {
 }
 
 func (a *App) handleInput(event *tcell.EventKey) *tcell.EventKey {
+	if a.pendingSlash {
+		a.pendingSlash = false
+		text := a.composer.GetInput()
+		if strings.HasPrefix(text, "/") {
+			a.enterSkill()
+			return nil
+		}
+	}
+
 	switch a.mode {
 	case ModeHelp:
 		if event.Key() == tcell.KeyEsc || event.Key() == tcell.KeyEnter {
@@ -159,6 +176,27 @@ func (a *App) handleInput(event *tcell.EventKey) *tcell.EventKey {
 			}
 			return nil
 		}
+	case ModeSkill:
+		if event.Key() == tcell.KeyEnter {
+			name := a.skillOverlay.SelectedSkillName()
+			if name != "" {
+				a.executeSkill(name)
+			}
+			return nil
+		}
+		if event.Key() == tcell.KeyEsc {
+			a.exitSkill()
+			return nil
+		}
+		if event.Key() == tcell.KeyTab {
+			name := a.skillOverlay.SelectedSkillName()
+			if name != "" {
+				a.composer.SetInput("/" + name)
+				a.executeSkill(name)
+			}
+			return nil
+		}
+		return event
 	}
 
 	// Chat mode — global shortcuts only here
@@ -171,6 +209,9 @@ func (a *App) handleInput(event *tcell.EventKey) *tcell.EventKey {
 		return nil
 	case event.Key() == tcell.KeyF1 || event.Key() == tcell.KeyCtrlO:
 		a.enterHelp()
+		return nil
+	case event.Key() == tcell.KeyCtrlP:
+		a.enterSkill()
 		return nil
 	case event.Key() == tcell.KeyEnter && event.Modifiers() == tcell.ModNone:
 		if a.isLoading {
@@ -283,6 +324,9 @@ func (a *App) handleInput(event *tcell.EventKey) *tcell.EventKey {
 			}
 			return nil
 		}
+	case event.Rune() == '/' && a.mode == ModeChat:
+		a.pendingSlash = true
+		return event
 	}
 
 	return event
@@ -456,6 +500,9 @@ func (a *App) AddWelcomeMessage() {
 
 func (a *App) SetAIAssistant(ai *service.AIAssistant) {
 	a.aiAssistant = ai
+	if a.skillRegistry != nil {
+		a.skillExecutor = service.NewSkillExecutor(a.skillRegistry, ai)
+	}
 }
 
 // Theme
@@ -512,4 +559,57 @@ func (a *App) SetComposerInput(input string) {
 // GetComposerInput returns the composer input text (for tests).
 func (a *App) GetComposerInput() string {
 	return a.composer.GetInput()
+}
+
+func (a *App) SetSkillRegistry(registry *service.SkillRegistry) {
+	a.skillRegistry = registry
+	if registry != nil {
+		a.skillExecutor = service.NewSkillExecutor(registry, a.aiAssistant)
+	}
+}
+
+func (a *App) enterSkill() {
+	a.mode = ModeSkill
+	a.pendingSlash = false
+	if a.skillRegistry != nil {
+		a.skillOverlay.SetSkills(a.skillRegistry.List())
+	}
+	a.chatFlex.RemoveItem(a.skillOverlay)
+	a.chatFlex.AddItem(a.skillOverlay, 5, 0, false)
+	a.SetFocus(a.skillOverlay)
+}
+
+func (a *App) exitSkill() {
+	a.mode = ModeChat
+	a.chatFlex.RemoveItem(a.skillOverlay)
+	a.chatFlex.AddItem(a.skillOverlay, 0, 0, false)
+	a.SetFocus(a.composer)
+}
+
+func (a *App) executeSkill(name string) {
+	a.mode = ModeChat
+	a.chatFlex.RemoveItem(a.skillOverlay)
+	a.chatFlex.AddItem(a.skillOverlay, 0, 0, false)
+	a.SetFocus(a.composer)
+
+	if a.skillExecutor == nil || a.activeSession < 0 {
+		return
+	}
+
+	s := a.sessions[a.activeSession]
+	text := a.composer.GetInput()
+	cmd := service.ParseCommand(text)
+	if cmd == nil {
+		cmd = &service.ParsedCommand{Name: name}
+	}
+
+	result, err := a.skillExecutor.Execute(cmd)
+	if err != nil {
+		s.AddMessage(RoleSkill, "Error: "+err.Error())
+	} else {
+		s.AddMessage(RoleSkill, result)
+	}
+	s.Messages[len(s.Messages)-1].Label = name
+	a.composer.ClearInput()
+	a.chatPanel.SetSession(s)
 }

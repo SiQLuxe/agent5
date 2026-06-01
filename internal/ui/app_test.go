@@ -447,3 +447,57 @@ func TestSendMessageBlockedDuringLoading(t *testing.T) {
 		}
 	}
 }
+
+func TestModeSkillCtrlP(t *testing.T) {
+	a := NewApp()
+	ev := tcell.NewEventKey(tcell.KeyCtrlP, 0, tcell.ModNone)
+	result := a.handleInput(ev)
+	if result != nil {
+		t.Fatal("expected Ctrl+P consumed (nil)")
+	}
+	if a.mode != ModeSkill {
+		t.Fatalf("expected ModeSkill, got %d", a.mode)
+	}
+}
+
+func TestModeSkillEscExits(t *testing.T) {
+	a := NewApp()
+	a.enterSkill()
+	ev := tcell.NewEventKey(tcell.KeyEsc, 0, tcell.ModNone)
+	result := a.handleInput(ev)
+	if result != nil {
+		t.Fatal("expected Esc consumed (nil)")
+	}
+	if a.mode != ModeChat {
+		t.Fatalf("expected ModeChat, got %d", a.mode)
+	}
+}
+
+func TestModeSkillEnterExecutes(t *testing.T) {
+	a := NewApp()
+	a.skillRegistry = service.NewSkillRegistry()
+	a.skillRegistry.Register(&service.Skill{Name: "test", Description: "test"})
+	a.newSession()
+	a.enterSkill()
+	a.skillOverlay.SetSkills(a.skillRegistry.List())
+	ev := tcell.NewEventKey(tcell.KeyEnter, 0, tcell.ModNone)
+	result := a.handleInput(ev)
+	if result != nil {
+		t.Fatal("expected Enter consumed (nil)")
+	}
+	if a.mode != ModeChat {
+		t.Fatalf("expected ModeChat after execute, got %d", a.mode)
+	}
+}
+
+func TestSetSkillRegistry(t *testing.T) {
+	a := NewApp()
+	r := service.NewSkillRegistry()
+	a.SetSkillRegistry(r)
+	if a.skillRegistry != r {
+		t.Fatal("skillRegistry not set")
+	}
+	if a.skillExecutor == nil {
+		t.Fatal("skillExecutor should be created")
+	}
+}
