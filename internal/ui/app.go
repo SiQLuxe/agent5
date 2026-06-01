@@ -45,7 +45,7 @@ type App struct {
 	commandPalette  *CommandPalette
 	commandRegistry *service.CommandRegistry
 	skillExecutor   *service.SkillExecutor
-	slashDetected   bool
+
 }
 
 func NewApp() *App {
@@ -128,22 +128,6 @@ func NewApp() *App {
 	// Register builtin commands
 	a.registerBuiltinCommands()
 
-	// Immediate slash detection
-	a.SetBeforeDrawFunc(func(screen tcell.Screen) bool {
-		if a.mode == ModeChat && a.composer != nil {
-			text := a.composer.GetInput()
-			if len(text) > 0 && text[0] == '/' {
-				if !a.slashDetected {
-					a.slashDetected = true
-					a.enterCommandPalette(ShowSkills)
-				}
-			} else {
-				a.slashDetected = false
-			}
-		}
-		return false
-	})
-
 	a.SetRoot(a.pages, true)
 	a.SetInputCapture(a.handleInput)
 	a.SetFocus(a.composer)
@@ -194,7 +178,12 @@ func (a *App) handleInput(event *tcell.EventKey) *tcell.EventKey {
 			return nil
 		}
 		if event.Key() == tcell.KeyEsc {
-			a.exitCommandPalette()
+			if a.commandPalette.FilterText() != "" {
+				a.commandPalette.SetFilter("")
+				a.commandPalette.GetFilterInput().SetText("")
+			} else {
+				a.exitCommandPalette()
+			}
 			return nil
 		}
 		if event.Key() == tcell.KeyTab {
@@ -205,6 +194,26 @@ func (a *App) handleInput(event *tcell.EventKey) *tcell.EventKey {
 					a.composer.SetInput("/" + cmd.Name + " ")
 				}
 				a.executeCommand(cmd)
+			}
+			return nil
+		}
+		if event.Key() == tcell.KeyDown {
+			a.commandPalette.SelectNext()
+			return nil
+		}
+		if event.Key() == tcell.KeyUp {
+			a.commandPalette.SelectPrev()
+			return nil
+		}
+		if event.Key() == tcell.KeyPgDn {
+			for i := 0; i < 5; i++ {
+				a.commandPalette.SelectNext()
+			}
+			return nil
+		}
+		if event.Key() == tcell.KeyPgUp {
+			for i := 0; i < 5; i++ {
+				a.commandPalette.SelectPrev()
 			}
 			return nil
 		}
@@ -224,6 +233,9 @@ func (a *App) handleInput(event *tcell.EventKey) *tcell.EventKey {
 		return nil
 	case event.Key() == tcell.KeyCtrlP:
 		a.enterCommandPalette(ShowAll)
+		return nil
+	case event.Rune() == '/' && event.Modifiers() == tcell.ModNone && a.mode == ModeChat:
+		a.enterCommandPalette(ShowSkills)
 		return nil
 	case event.Key() == tcell.KeyEnter && event.Modifiers() == tcell.ModNone:
 		if a.isLoading {
@@ -582,9 +594,11 @@ func (a *App) enterCommandPalette(mode PaletteMode) {
 		a.commandPalette.SetCommands(cmds)
 	}
 	a.commandPalette.SetMode(mode)
+	a.commandPalette.SetFilter("")
+	a.commandPalette.GetFilterInput().SetText("")
 	a.chatFlex.RemoveItem(a.commandPalette)
 	a.chatFlex.AddItem(a.commandPalette, 6, 0, false)
-	a.SetFocus(a.commandPalette)
+	a.SetFocus(a.commandPalette.GetFilterInput())
 }
 
 func (a *App) exitCommandPalette() {
