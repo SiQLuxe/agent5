@@ -460,6 +460,18 @@ func TestCommandPaletteCtrlP(t *testing.T) {
 	}
 }
 
+func TestCommandPaletteSlashKey(t *testing.T) {
+	a := NewApp()
+	ev := tcell.NewEventKey(tcell.KeyRune, '/', tcell.ModNone)
+	result := a.handleInput(ev)
+	if result != nil {
+		t.Fatal("expected '/' consumed (nil)")
+	}
+	if a.mode != ModeCommandPalette {
+		t.Fatalf("expected ModeCommandPalette, got %d", a.mode)
+	}
+}
+
 func TestCommandPaletteEscExits(t *testing.T) {
 	a := NewApp()
 	a.enterCommandPalette(ShowAll)
@@ -491,6 +503,81 @@ func TestCommandPaletteBuiltinsRegistered(t *testing.T) {
 	}
 	if !found {
 		t.Fatal("expected 'New Session' command")
+	}
+}
+
+func TestCommandPaletteAllNewCommands(t *testing.T) {
+	a := NewApp()
+	a.newSession()
+	a.newSession()
+	a.switchToSession(0)
+
+	names := []string{
+		"Previous Session",
+		"Rename Session",
+		"Scroll to Top",
+		"Scroll to Bottom",
+		"Clear Input",
+		"Reload Skills",
+	}
+	for _, name := range names {
+		cmd := a.commandRegistry.Get(name)
+		if cmd == nil {
+			t.Fatalf("command %q not registered", name)
+		}
+		if cmd.Category != service.CmdBuiltin {
+			t.Fatalf("command %q expected builtin", name)
+		}
+	}
+}
+
+func TestCommandScrollToTop(t *testing.T) {
+	a := NewApp()
+	a.newSession()
+	a.AddChatMessage("user", "hello")
+	cmd := a.commandRegistry.Get("Scroll to Top")
+	if cmd == nil {
+		t.Fatal("Scroll to Top not registered")
+	}
+	cmd.Action("")
+}
+
+func TestCommandScrollToBottom(t *testing.T) {
+	a := NewApp()
+	a.newSession()
+	a.AddChatMessage("user", "hello")
+	cmd := a.commandRegistry.Get("Scroll to Bottom")
+	if cmd == nil {
+		t.Fatal("Scroll to Bottom not registered")
+	}
+	cmd.Action("")
+}
+
+func TestCommandClearInput(t *testing.T) {
+	a := NewApp()
+	a.composer.SetInput("some text")
+	cmd := a.commandRegistry.Get("Clear Input")
+	if cmd == nil {
+		t.Fatal("Clear Input not registered")
+	}
+	cmd.Action("")
+	if a.composer.GetInput() != "" {
+		t.Fatal("expected cleared input")
+	}
+}
+
+func TestCommandPreviousSession(t *testing.T) {
+	a := NewApp()
+	a.newSession()
+	a.newSession()
+	a.switchToSession(1)
+	cmd := a.commandRegistry.Get("Previous Session")
+	if cmd == nil {
+		t.Fatal("Previous Session not registered")
+	}
+	cmd.Action("")
+	if a.activeSession != 0 {
+		t.Fatalf("expected session 0, got %d", a.activeSession)
 	}
 }
 

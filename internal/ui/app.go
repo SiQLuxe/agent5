@@ -645,6 +645,9 @@ func (a *App) executeSkill(name string) {
 	a.chatPanel.SetSession(s)
 }
 
+func (a *App) enterRename()   {} // stub — implemented in Task 3
+func (a *App) reloadSkills()  {} // stub — implemented in Task 5
+
 func (a *App) registerBuiltinCommands() {
 	r := service.NewCommandRegistry()
 
@@ -695,6 +698,42 @@ func (a *App) registerBuiltinCommands() {
 		Description: "Show keyboard shortcuts",
 		Category:    service.CmdBuiltin,
 		Action:      func(string) { a.enterHelp() },
+	})
+	r.Register(&service.Command{
+		Name:        "Previous Session",
+		Description: "Switch to the previous session",
+		Category:    service.CmdBuiltin,
+		Action:      func(string) { a.prevSession() },
+	})
+	r.Register(&service.Command{
+		Name:        "Rename Session",
+		Description: "Rename the current session",
+		Category:    service.CmdBuiltin,
+		Action:      func(string) { a.enterRename() },
+	})
+	r.Register(&service.Command{
+		Name:        "Scroll to Top",
+		Description: "Scroll chat to the top",
+		Category:    service.CmdBuiltin,
+		Action:      func(string) { a.chatPanel.ScrollToTop() },
+	})
+	r.Register(&service.Command{
+		Name:        "Scroll to Bottom",
+		Description: "Scroll chat to the bottom",
+		Category:    service.CmdBuiltin,
+		Action:      func(string) { a.chatPanel.ScrollToBottom() },
+	})
+	r.Register(&service.Command{
+		Name:        "Clear Input",
+		Description: "Clear the text input area",
+		Category:    service.CmdBuiltin,
+		Action:      func(string) { a.composer.ClearInput() },
+	})
+	r.Register(&service.Command{
+		Name:        "Reload Skills",
+		Description: "Reload skills from disk",
+		Category:    service.CmdBuiltin,
+		Action:      func(string) { a.reloadSkills() },
 	})
 
 	a.commandRegistry = r
