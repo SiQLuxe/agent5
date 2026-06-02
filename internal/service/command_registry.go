@@ -14,6 +14,7 @@ const (
 type Command struct {
 	Name        string
 	Description string
+	Shortcut    string
 	Category    CommandCategory
 	Action      func(args string)
 }

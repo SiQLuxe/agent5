@@ -95,15 +95,23 @@ func NewApp() *App {
 	a.helpView.SetTitle(" Help ")
 	a.helpView.SetTextStyle(tcell.StyleDefault.Background(tcell.ColorDefault))
 
-	// Build layout: StatusBar + ChatPanel + [CommandPalette] + Composer + TabDock
+	// Build layout: StatusBar + ChatPanel + Composer + TabDock
 	chatFlex := tview.NewFlex().SetDirection(tview.FlexRow)
 	chatFlex.AddItem(a.statusBar, 1, 0, false)
 	chatFlex.AddItem(a.chatPanel, 0, 1, false)
 	a.commandPalette = NewCommandPalette()
-	chatFlex.AddItem(a.commandPalette, 0, 0, false) // hidden by default
 	chatFlex.AddItem(a.composer, 3, 0, true)
 	chatFlex.AddItem(a.tabDock, 1, 0, false)
 	a.chatFlex = chatFlex
+
+	// Command palette overlay: centered box with filter + list
+	commandInner := tview.NewFlex().SetDirection(tview.FlexRow)
+	commandInner.AddItem(a.commandPalette, 0, 1, true)
+	commandPage := tview.NewFlex().SetDirection(tview.FlexColumn)
+	commandPage.AddItem(nil, 0, 1, false)
+	commandPage.AddItem(commandInner, 60, 0, true)
+	commandPage.AddItem(nil, 0, 1, false)
+	a.pages.AddPage("command", commandPage, true, false)
 
 	// Search overlay: centered box with InputField + status
 	searchFlex := tview.NewFlex().SetDirection(tview.FlexRow)
@@ -324,12 +332,6 @@ func (a *App) handleInput(event *tcell.EventKey) *tcell.EventKey {
 	case event.Key() == tcell.KeyCtrlR:
 		a.renameSession()
 		return nil
-	case event.Key() == tcell.KeyTab:
-		a.nextSession()
-		return nil
-	case event.Key() == tcell.KeyBacktab:
-		a.prevSession()
-		return nil
 	case event.Key() == tcell.KeyCtrlT:
 		if s := a.activeSessionPtr(); s != nil {
 			s.ToggleThinking()
@@ -383,6 +385,35 @@ func (a *App) handleInput(event *tcell.EventKey) *tcell.EventKey {
 			}
 			return nil
 		}
+	case event.Rune() == '\u00f1' || event.Rune() == '\u00d1': // Option+n/N → ñ/Ñ
+		a.newSession()
+		return nil
+	case event.Rune() == '\u2020' || event.Rune() == '\u2021': // Option+w/W → †/‡
+		a.closeSession()
+		return nil
+	case event.Rune() == '\u00ae': // Option+r → ®
+		a.renameSession()
+		return nil
+	case event.Rune() == '\u2265': // Option+. → ≥
+		a.nextSession()
+		return nil
+	case event.Rune() == '\u2264': // Option+, → ≤
+		a.prevSession()
+		return nil
+	case event.Rune() == '\u2122': // Option+t → ™
+		if s := a.activeSessionPtr(); s != nil {
+			s.ToggleThinking()
+		}
+		return nil
+	case event.Rune() == '\u00a5': // Option+y → ¥
+		if s := a.activeSessionPtr(); s != nil {
+			s.ToggleCollapse()
+		}
+		return nil
+	case event.Rune() == '\u00df': // Option+s → ß
+		a.themeService.NextTheme()
+		a.applyTheme()
+		return nil
 	}
 
 	return event
@@ -639,22 +670,19 @@ func (a *App) enterCommandPalette(mode PaletteMode) {
 	a.commandPalette.SetMode(mode)
 	a.commandPalette.SetFilter("")
 	a.commandPalette.GetFilterInput().SetText("")
-	a.chatFlex.RemoveItem(a.commandPalette)
-	a.chatFlex.AddItem(a.commandPalette, 6, 0, false)
+	a.pages.SwitchToPage("command")
 	a.SetFocus(a.commandPalette.GetFilterInput())
 }
 
 func (a *App) exitCommandPalette() {
 	a.mode = ModeChat
-	a.chatFlex.RemoveItem(a.commandPalette)
-	a.chatFlex.AddItem(a.commandPalette, 0, 0, false)
+	a.pages.SwitchToPage("chat")
 	a.SetFocus(a.composer)
 }
 
 func (a *App) executeCommand(cmd *service.Command) {
 	a.mode = ModeChat
-	a.chatFlex.RemoveItem(a.commandPalette)
-	a.chatFlex.AddItem(a.commandPalette, 0, 0, false)
+	a.pages.SwitchToPage("chat")
 	a.SetFocus(a.composer)
 
 	switch cmd.Category {
@@ -773,85 +801,97 @@ func (a *App) registerBuiltinCommands() {
 
 	r.Register(&service.Command{
 		Name:        "New Session",
-		Description: "Create a new chat session",
+		Description: "新建会话",
+		Shortcut:    "Ctrl+N / Alt+N",
 		Category:    service.CmdBuiltin,
 		Action:      func(string) { a.newSession() },
 	})
 	r.Register(&service.Command{
-		Name:        "Search",
-		Description: "Search messages in current session",
-		Category:    service.CmdBuiltin,
-		Action:      func(string) { a.enterSearch() },
-	})
-	r.Register(&service.Command{
-		Name:        "Toggle Thinking",
-		Description: "Expand or collapse thinking blocks",
-		Category:    service.CmdBuiltin,
-		Action:      func(string) { if s := a.activeSessionPtr(); s != nil { s.ToggleThinking() } },
-	})
-	r.Register(&service.Command{
-		Name:        "Toggle Collapse",
-		Description: "Collapse or expand the last message",
-		Category:    service.CmdBuiltin,
-		Action:      func(string) { if s := a.activeSessionPtr(); s != nil { s.ToggleCollapse() } },
-	})
-	r.Register(&service.Command{
-		Name:        "Next Theme",
-		Description: "Switch to the next color theme",
-		Category:    service.CmdBuiltin,
-		Action:      func(string) { a.themeService.NextTheme(); a.applyTheme() },
-	})
-	r.Register(&service.Command{
-		Name:        "Next Session",
-		Description: "Switch to the next session tab",
-		Category:    service.CmdBuiltin,
-		Action:      func(string) { a.nextSession() },
-	})
-	r.Register(&service.Command{
 		Name:        "Close Session",
-		Description: "Close the current session",
+		Description: "关闭当前会话",
+		Shortcut:    "Ctrl+W / Alt+W",
 		Category:    service.CmdBuiltin,
 		Action:      func(string) { a.closeSession() },
 	})
 	r.Register(&service.Command{
-		Name:        "Help",
-		Description: "Show keyboard shortcuts",
+		Name:        "Next Session",
+		Description: "切换到下一个会话",
+		Shortcut:    "Alt+.",
 		Category:    service.CmdBuiltin,
-		Action:      func(string) { a.enterHelp() },
+		Action:      func(string) { a.nextSession() },
 	})
 	r.Register(&service.Command{
 		Name:        "Previous Session",
-		Description: "Switch to the previous session",
+		Description: "切换到上一个会话",
+		Shortcut:    "Alt+,",
 		Category:    service.CmdBuiltin,
 		Action:      func(string) { a.prevSession() },
 	})
 	r.Register(&service.Command{
 		Name:        "Rename Session",
-		Description: "Rename the current session",
+		Description: "重命名当前会话",
+		Shortcut:    "Ctrl+R / Alt+R",
 		Category:    service.CmdBuiltin,
 		Action:      func(string) { a.enterRename() },
 	})
 	r.Register(&service.Command{
+		Name:        "Search",
+		Description: "搜索当前会话中的消息",
+		Shortcut:    "Ctrl+F",
+		Category:    service.CmdBuiltin,
+		Action:      func(string) { a.enterSearch() },
+	})
+	r.Register(&service.Command{
+		Name:        "Help",
+		Description: "显示键盘快捷键列表",
+		Shortcut:    "F1 / Ctrl+O",
+		Category:    service.CmdBuiltin,
+		Action:      func(string) { a.enterHelp() },
+	})
+	r.Register(&service.Command{
+		Name:        "Toggle Thinking",
+		Description: "展开或收起思考过程",
+		Shortcut:    "Ctrl+T / Alt+T",
+		Category:    service.CmdBuiltin,
+		Action:      func(string) { if s := a.activeSessionPtr(); s != nil { s.ToggleThinking() } },
+	})
+	r.Register(&service.Command{
+		Name:        "Toggle Collapse",
+		Description: "折叠或展开最后一条消息",
+		Shortcut:    "Ctrl+Y / Alt+Y",
+		Category:    service.CmdBuiltin,
+		Action:      func(string) { if s := a.activeSessionPtr(); s != nil { s.ToggleCollapse() } },
+	})
+	r.Register(&service.Command{
+		Name:        "Next Theme",
+		Description: "切换到下一个颜色主题",
+		Shortcut:    "Ctrl+K / Alt+S",
+		Category:    service.CmdBuiltin,
+		Action:      func(string) { a.themeService.NextTheme(); a.applyTheme() },
+	})
+	r.Register(&service.Command{
 		Name:        "Scroll to Top",
-		Description: "Scroll chat to the top",
+		Description: "滚动到消息顶部",
+		Shortcut:    "g",
 		Category:    service.CmdBuiltin,
 		Action:      func(string) { a.chatPanel.ScrollToTop() },
 	})
 	r.Register(&service.Command{
 		Name:        "Scroll to Bottom",
-		Description: "Scroll chat to the bottom",
+		Description: "滚动到消息底部",
+		Shortcut:    "G",
 		Category:    service.CmdBuiltin,
 		Action:      func(string) { a.chatPanel.ScrollToBottom() },
 	})
 	r.Register(&service.Command{
 		Name:        "Clear Input",
-		Description: "Clear the text input area",
+		Description: "清空输入框",
 		Category:    service.CmdBuiltin,
 		Action:      func(string) { a.composer.ClearInput() },
 	})
 	r.Register(&service.Command{
 		Name:        "Reload Skills",
-		Description: "Reload skills from disk",
+		Description: "从磁盘重新加载技能",
 		Category:    service.CmdBuiltin,
 		Action:      func(string) { a.reloadSkills() },
 	})

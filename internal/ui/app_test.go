@@ -425,33 +425,72 @@ func TestShortcutRenameSession_CtrlR(t *testing.T) {
 	}
 }
 
-func TestShortcutNextSession_Tab(t *testing.T) {
+func TestShortcutNextSession_AltDot(t *testing.T) {
 	a := NewApp()
 	a.newSession()
 	a.newSession()
 	a.switchToSession(0)
-	ev := tcell.NewEventKey(tcell.KeyTab, 0, tcell.ModNone)
+	ev := tcell.NewEventKey(tcell.KeyRune, '.', tcell.ModAlt)
 	result := a.handleInput(ev)
 	if result != nil {
-		t.Fatal("expected Tab to be consumed (nil)")
+		t.Fatal("expected Alt+. to be consumed (nil)")
 	}
 	if a.activeSession != 1 {
 		t.Fatalf("expected active session 1, got %d", a.activeSession)
 	}
 }
 
-func TestShortcutPrevSession_ShiftTab(t *testing.T) {
+func TestShortcutPrevSession_AltComma(t *testing.T) {
 	a := NewApp()
 	a.newSession()
 	a.newSession()
 	a.switchToSession(0)
-	ev := tcell.NewEventKey(tcell.KeyBacktab, 0, tcell.ModNone)
+	ev := tcell.NewEventKey(tcell.KeyRune, ',', tcell.ModAlt)
 	result := a.handleInput(ev)
 	if result != nil {
-		t.Fatal("expected Shift+Tab to be consumed (nil)")
+		t.Fatal("expected Alt+, to be consumed (nil)")
 	}
 	if a.activeSession != 1 {
 		t.Fatalf("expected active session 1 (wrap), got %d", a.activeSession)
+	}
+}
+
+func TestShortcutNextSession_MacOSOptionDot(t *testing.T) {
+	a := NewApp()
+	a.newSession()
+	a.newSession()
+	a.switchToSession(0)
+	ev := tcell.NewEventKey(tcell.KeyRune, '\u2265', tcell.ModNone)
+	result := a.handleInput(ev)
+	if result != nil {
+		t.Fatal("expected Option+. (≥) to be consumed (nil)")
+	}
+	if a.activeSession != 1 {
+		t.Fatalf("expected active session 1, got %d", a.activeSession)
+	}
+}
+
+func TestShortcutPrevSession_MacOSOptionComma(t *testing.T) {
+	a := NewApp()
+	a.newSession()
+	a.newSession()
+	a.switchToSession(0)
+	ev := tcell.NewEventKey(tcell.KeyRune, '\u2264', tcell.ModNone)
+	result := a.handleInput(ev)
+	if result != nil {
+		t.Fatal("expected Option+, (≤) to be consumed (nil)")
+	}
+	if a.activeSession != 1 {
+		t.Fatalf("expected active session 1 (wrap), got %d", a.activeSession)
+	}
+}
+
+func TestTabPassesThrough(t *testing.T) {
+	a := NewApp()
+	ev := tcell.NewEventKey(tcell.KeyTab, 0, tcell.ModNone)
+	result := a.handleInput(ev)
+	if result == nil {
+		t.Fatal("expected Tab to pass through (non-nil)")
 	}
 }
 

@@ -94,7 +94,14 @@ func (p *CommandPalette) applyFilter() {
 		} else {
 			prefix = "\u26a1 "
 		}
-		p.list.AddItem(prefix+displayName, cmd.Description, 0, nil)
+		secondary := cmd.Description
+		if cmd.Shortcut != "" {
+			if secondary != "" {
+				secondary += "  "
+			}
+			secondary += "[gray::b]" + cmd.Shortcut + "[-:-:-]"
+		}
+		p.list.AddItem(prefix+displayName, secondary, 0, nil)
 	}
 }
 
