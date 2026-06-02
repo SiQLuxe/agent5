@@ -78,6 +78,15 @@ func (c *Composer) SetAccentColor(color tcell.Color) {
 	c.accentColor = color
 }
 
+func (c *Composer) SetOnTextChanged(fn func(text string)) {
+	c.textArea.SetChangedFunc(func() {
+		text := c.textArea.GetText()
+		if fn != nil {
+			fn(text)
+		}
+	})
+}
+
 func (c *Composer) SetBackgroundColor(color tcell.Color) {
 	c.textArea.SetBackgroundColor(color)
 	c.prompt.SetBackgroundColor(color)

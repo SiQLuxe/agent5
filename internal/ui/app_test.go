@@ -571,15 +571,12 @@ func TestCommandPaletteCtrlP(t *testing.T) {
 	}
 }
 
-func TestCommandPaletteSlashKey(t *testing.T) {
+func TestSlashPassesThrough(t *testing.T) {
 	a := NewApp()
 	ev := tcell.NewEventKey(tcell.KeyRune, '/', tcell.ModNone)
 	result := a.handleInput(ev)
-	if result != nil {
-		t.Fatal("expected '/' consumed (nil)")
-	}
-	if a.mode != ModeCommandPalette {
-		t.Fatalf("expected ModeCommandPalette, got %d", a.mode)
+	if result == nil {
+		t.Fatal("expected '/' to pass through (non-nil)")
 	}
 }
 

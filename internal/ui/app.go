@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -51,6 +52,9 @@ type App struct {
 	skillExecutor   *service.SkillExecutor
 	skillRegistry   *service.SkillRegistry
 	skillsDir       string
+	suggestionBar   *tview.TextView
+	suggestionCmds  []*service.Command
+	suggestionIdx   int
 	renameInput     *tview.InputField
 	renamePage      *tview.Flex
 }
@@ -95,23 +99,23 @@ func NewApp() *App {
 	a.helpView.SetTitle(" Help ")
 	a.helpView.SetTextStyle(tcell.StyleDefault.Background(tcell.ColorDefault))
 
-	// Build layout: StatusBar + ChatPanel + Composer + TabDock
+	// Build layout: StatusBar + ChatPanel + Composer + SuggestionBar + TabDock
 	chatFlex := tview.NewFlex().SetDirection(tview.FlexRow)
 	chatFlex.AddItem(a.statusBar, 1, 0, false)
 	chatFlex.AddItem(a.chatPanel, 0, 1, false)
 	a.commandPalette = NewCommandPalette()
+	a.suggestionBar = tview.NewTextView()
+	a.suggestionBar.SetDynamicColors(true)
+	a.suggestionBar.SetTextStyle(tcell.StyleDefault.Background(tcell.ColorDefault))
 	chatFlex.AddItem(a.composer, 3, 0, true)
+	chatFlex.AddItem(a.suggestionBar, 0, 0, false) // hidden by default
 	chatFlex.AddItem(a.tabDock, 1, 0, false)
 	a.chatFlex = chatFlex
 
-	// Command palette overlay: centered box with filter + list
-	commandInner := tview.NewFlex().SetDirection(tview.FlexRow)
-	commandInner.AddItem(a.commandPalette, 0, 1, true)
-	commandPage := tview.NewFlex().SetDirection(tview.FlexColumn)
-	commandPage.AddItem(nil, 0, 1, false)
-	commandPage.AddItem(commandInner, 60, 0, true)
-	commandPage.AddItem(nil, 0, 1, false)
-	a.pages.AddPage("command", commandPage, true, false)
+	// Composer text change handler for command suggestions
+	a.composer.SetOnTextChanged(func(text string) {
+		a.onComposerChange(text)
+	})
 
 	// Search overlay: centered box with InputField + status
 	searchFlex := tview.NewFlex().SetDirection(tview.FlexRow)
@@ -277,9 +281,6 @@ func (a *App) handleInput(event *tcell.EventKey) *tcell.EventKey {
 	case event.Key() == tcell.KeyCtrlP:
 		a.enterCommandPalette(ShowAll)
 		return nil
-	case event.Rune() == '/' && event.Modifiers() == tcell.ModNone && a.mode == ModeChat:
-		a.enterCommandPalette(ShowSkills)
-		return nil
 	case event.Key() == tcell.KeyEnter && event.Modifiers() == tcell.ModNone:
 		if a.isLoading {
 			return nil
@@ -293,6 +294,11 @@ func (a *App) handleInput(event *tcell.EventKey) *tcell.EventKey {
 	case event.Key() == tcell.KeyEnter && (event.Modifiers()&tcell.ModCtrl != 0 || event.Modifiers()&tcell.ModAlt != 0):
 		// Ctrl+Enter or Alt+Enter: insert newline (let fall through to TextArea)
 		return event
+	case event.Key() == tcell.KeyTab && len(a.suggestionCmds) > 0:
+		cmd := a.suggestionCmds[0]
+		a.composer.SetInput("/" + cmd.Name + " ")
+		a.hideSuggestions()
+		return nil
 	case event.Key() == tcell.KeyPgUp:
 		a.chatPanel.ScrollUp(10)
 		return nil
@@ -524,6 +530,27 @@ func (a *App) sendMessage() {
 	}
 	a.inputHistory = append(a.inputHistory, text)
 	a.historyIndex = 0
+	a.hideSuggestions()
+
+	// Detect /command
+	if strings.HasPrefix(text, "/") {
+		pc := service.ParseCommand(text)
+		if pc != nil && a.skillExecutor != nil {
+			s := a.activeSessionPtr()
+			if s != nil {
+				result, err := a.skillExecutor.Execute(pc)
+				if err != nil {
+					s.AddMessage(RoleSkill, "Error: "+err.Error())
+				} else {
+					s.AddMessage(RoleSkill, result)
+				}
+				s.Messages[len(s.Messages)-1].Label = pc.Name
+			}
+		}
+		a.composer.ClearInput()
+		return
+	}
+
 	if a.aiAssistant == nil {
 		return
 	}
@@ -573,6 +600,58 @@ func (a *App) sendMessage() {
 			}
 		})
 	}()
+}
+
+func (a *App) onComposerChange(text string) {
+	if a.commandRegistry == nil {
+		return
+	}
+	if strings.HasPrefix(text, "/") {
+		prefix := strings.TrimPrefix(text, "/")
+		var cmds []*service.Command
+		for _, c := range a.commandRegistry.List() {
+			if c.Category == service.CmdSkill && strings.HasPrefix(c.Name, prefix) {
+				cmds = append(cmds, c)
+			}
+		}
+		if len(cmds) > 0 {
+			a.showSuggestions(cmds)
+			return
+		}
+	}
+	a.hideSuggestions()
+}
+
+func (a *App) showSuggestions(cmds []*service.Command) {
+	a.suggestionCmds = cmds
+	a.suggestionIdx = 0
+	var b strings.Builder
+	for i, c := range cmds {
+		if i > 0 {
+			b.WriteString("  ")
+		}
+		marker := " "
+		if i == 0 {
+			marker = ">"
+		}
+		b.WriteString(fmt.Sprintf("[gray::b]%s[-:-:-] [white]%s[-] [gray]%s[-]", marker, c.Name, c.Description))
+	}
+	a.suggestionBar.SetText(b.String())
+	a.suggestionBar.SetBorder(true)
+	a.suggestionBar.SetTitle(" Commands ")
+	// Show by setting height to 3
+	a.chatFlex.RemoveItem(a.suggestionBar)
+	a.chatFlex.AddItem(a.suggestionBar, 3, 0, false)
+}
+
+func (a *App) hideSuggestions() {
+	a.suggestionCmds = nil
+	a.suggestionIdx = 0
+	a.suggestionBar.SetBorder(false)
+	a.suggestionBar.SetText("")
+	// Hide by setting height to 0
+	a.chatFlex.RemoveItem(a.suggestionBar)
+	a.chatFlex.AddItem(a.suggestionBar, 0, 0, false)
 }
 
 func (a *App) AddWelcomeMessage() {
