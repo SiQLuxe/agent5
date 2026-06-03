@@ -14,40 +14,25 @@ const maxVisibleItems = 8
 
 type SuggestionMenu struct {
 	*tview.Flex
-	items      []*service.Command
-	filtered   []*service.Command
-	filterText string
-	selected   int
-	list       *tview.Box
-	headerBar  *tview.TextView
-	statusBar  *tview.TextView
-	visible    bool
+	items       []*service.Command
+	filtered    []*service.Command
+	filterText  string
+	selected    int
+	scrollOffset int
+	list        *tview.Box
+	visible     bool
 }
 
 func New() *SuggestionMenu {
-	header := tview.NewTextView()
-	header.SetDynamicColors(true)
-	header.SetText("[::b]/ [::-]")
-	header.SetTextAlign(tview.AlignLeft)
-
-	status := tview.NewTextView()
-	status.SetDynamicColors(true)
-	status.SetText("[gray]↑↓ 选择  Enter 回填  Esc 关闭[-]")
-	status.SetTextAlign(tview.AlignCenter)
-
 	list := tview.NewBox()
 	list.SetBackgroundColor(tcell.ColorDefault)
 
 	m := &SuggestionMenu{
-		Flex:      tview.NewFlex().SetDirection(tview.FlexRow),
-		list:      list,
-		headerBar: header,
-		statusBar: status,
+		Flex: tview.NewFlex().SetDirection(tview.FlexRow),
+		list: list,
 	}
 
-	m.AddItem(header, 1, 0, false)
 	m.AddItem(list, 0, 1, false)
-	m.AddItem(status, 1, 0, false)
 	m.SetBackgroundColor(tcell.ColorDefault)
 
 	list.SetDrawFunc(m.drawList)
@@ -65,15 +50,17 @@ func (m *SuggestionMenu) drawList(screen tcell.Screen, x, y, width, height int) 
 		descColWidth = 0
 	}
 
-	for i, cmd := range m.filtered {
-		if i >= height {
-			break
-		}
-		rowY := y + i
+	endIdx := m.scrollOffset + height
+	if endIdx > len(m.filtered) {
+		endIdx = len(m.filtered)
+	}
+	for idx := m.scrollOffset; idx < endIdx; idx++ {
+		cmd := m.filtered[idx]
+		rowY := y + idx - m.scrollOffset
 
 		bg := tcell.ColorDefault
 		fg := tcell.ColorWhite
-		if i == m.selected {
+		if idx == m.selected {
 			bg = tcell.ColorOrange
 		}
 		style := tcell.StyleDefault.Background(bg).Foreground(fg)
@@ -88,7 +75,7 @@ func (m *SuggestionMenu) drawList(screen tcell.Screen, x, y, width, height int) 
 		screen.SetContent(x+nameColWidth, rowY, ' ', nil, style)
 
 		descStyle := tcell.StyleDefault.Background(bg).Foreground(tcell.ColorGray)
-		if i == m.selected {
+		if idx == m.selected {
 			descStyle = style
 		}
 		desc := cmd.Description
@@ -119,12 +106,14 @@ func (m *SuggestionMenu) Filtered() []*service.Command {
 func (m *SuggestionMenu) SetCommands(cmds []*service.Command) {
 	m.items = cmds
 	m.selected = 0
+	m.scrollOffset = 0
 	m.applyFilter()
 }
 
 func (m *SuggestionMenu) SetFilter(text string) {
 	m.filterText = text
 	m.selected = 0
+	m.scrollOffset = 0
 	m.applyFilter()
 }
 
@@ -139,14 +128,22 @@ func (m *SuggestionMenu) applyFilter() {
 }
 
 func (m *SuggestionMenu) SelectNext() {
-	if m.selected < len(m.filtered)-1 {
-		m.selected++
+	if m.selected >= len(m.filtered)-1 {
+		return
+	}
+	m.selected++
+	if m.selected-m.scrollOffset >= maxVisibleItems {
+		m.scrollOffset++
 	}
 }
 
 func (m *SuggestionMenu) SelectPrev() {
-	if m.selected > 0 {
-		m.selected--
+	if m.selected <= 0 {
+		return
+	}
+	m.selected--
+	if m.selected < m.scrollOffset {
+		m.scrollOffset--
 	}
 }
 
@@ -177,5 +174,5 @@ func (m *SuggestionMenu) Height() int {
 	if n > maxVisibleItems {
 		n = maxVisibleItems
 	}
-	return n + 2
+	return n
 }

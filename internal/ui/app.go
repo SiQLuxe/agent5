@@ -642,14 +642,12 @@ func (a *App) onComposerChange(text string) {
 
 func (a *App) showSuggestions() {
 	a.suggestionMenu.Show()
-	a.chatFlex.RemoveItem(a.suggestionMenu)
-	a.chatFlex.AddItem(a.suggestionMenu, a.suggestionMenu.Height(), 0, false)
+	a.chatFlex.ResizeItem(a.suggestionMenu, a.suggestionMenu.Height(), 0)
 }
 
 func (a *App) hideSuggestions() {
 	a.suggestionMenu.Hide()
-	a.chatFlex.RemoveItem(a.suggestionMenu)
-	a.chatFlex.AddItem(a.suggestionMenu, 0, 0, false)
+	a.chatFlex.ResizeItem(a.suggestionMenu, 0, 0)
 }
 
 func (a *App) AddWelcomeMessage() {

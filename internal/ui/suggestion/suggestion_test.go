@@ -11,14 +11,8 @@ func TestNew(t *testing.T) {
 	if m == nil {
 		t.Fatal("New() returned nil")
 	}
-	if m.headerBar == nil {
-		t.Fatal("expected headerBar")
-	}
 	if m.list == nil {
 		t.Fatal("expected list")
-	}
-	if m.statusBar == nil {
-		t.Fatal("expected statusBar")
 	}
 }
 
@@ -154,8 +148,8 @@ func TestShowHide(t *testing.T) {
 	if !m.Visible() {
 		t.Fatal("expected visible after Show()")
 	}
-	if m.Height() != 3 { // 1 item + header + status = 3
-		t.Fatalf("expected height 3, got %d", m.Height())
+	if m.Height() != 1 { // 1 item
+		t.Fatalf("expected height 1, got %d", m.Height())
 	}
 	m.Hide()
 	if m.Visible() {
@@ -175,8 +169,44 @@ func TestHeightMax(t *testing.T) {
 	m.SetCommands(cmds)
 	m.SetFilter("")
 	m.Show()
-	if m.Height() != 10 { // max 8 items + header + status = 10
-		t.Fatalf("expected height 10 (capped), got %d", m.Height())
+	if m.Height() != 8 { // max 8 items
+		t.Fatalf("expected height 8 (capped), got %d", m.Height())
+	}
+}
+
+func TestScrolling(t *testing.T) {
+	m := New()
+	cmds := make([]*service.Command, 20)
+	for i := 0; i < 20; i++ {
+		cmds[i] = &service.Command{Name: string(rune('A' + i))}
+	}
+	m.SetCommands(cmds)
+	m.SetFilter("")
+
+	if m.scrollOffset != 0 {
+		t.Fatalf("expected scrollOffset 0, got %d", m.scrollOffset)
+	}
+
+	// 选到第 9 项 (index 8) → 超出 8 项可见范围, 触发滚动
+	for i := 0; i < 8; i++ {
+		m.SelectNext()
+	}
+	if m.scrollOffset != 1 {
+		t.Fatalf("expected scrollOffset 1 when selected=8, got %d", m.scrollOffset)
+	}
+
+	// 向上回到可见范围内, scrollOffset 不变 (selected=7, ≥ scrollOffset=1)
+	m.SelectPrev()
+	if m.scrollOffset != 1 {
+		t.Fatalf("expected scrollOffset 1 when selected visible, got %d", m.scrollOffset)
+	}
+
+	// 继续向上直到高于 scrollOffset → 回滚
+	for i := 0; i < 7; i++ {
+		m.SelectPrev()
+	}
+	if m.scrollOffset != 0 {
+		t.Fatalf("expected scrollOffset 0 after scrolling back to top, got %d", m.scrollOffset)
 	}
 }
 
