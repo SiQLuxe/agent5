@@ -720,6 +720,44 @@ func (a *App) GetComposerInput() string {
 	return a.composer.GetInput()
 }
 
+// TUIActionHandler implementations (for reverse-control server).
+
+func (a *App) AppendPrompt(text string) {
+	a.QueueUpdateDraw(func() {
+		current := a.composer.GetInput()
+		a.composer.SetInput(current + text)
+	})
+}
+
+func (a *App) SubmitPrompt() {
+	a.QueueUpdateDraw(func() {
+		a.sendMessage()
+	})
+}
+
+func (a *App) ShowToast(title, message, variant string) {
+	a.QueueUpdateDraw(func() {
+		a.statusBar.ShowMessage(message)
+	})
+	go func() {
+		time.Sleep(3 * time.Second)
+		a.QueueUpdateDraw(func() {
+			a.statusBar.ClearMessage()
+		})
+	}()
+}
+
+func (a *App) ExecuteCommand(command string) {
+	for _, cmd := range a.commandRegistry.List() {
+		if cmd.Name == command {
+			a.QueueUpdateDraw(func() {
+				a.executeCommand(cmd)
+			})
+			return
+		}
+	}
+}
+
 func (a *App) CommandRegistry() *service.CommandRegistry {
 	return a.commandRegistry
 }

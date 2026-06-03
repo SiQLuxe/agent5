@@ -12,6 +12,9 @@ func TestNewBackend_UnknownType(t *testing.T) {
 }
 
 func TestNewBackend_Opencode(t *testing.T) {
+	if _, ok := backendBuilders[TypeOpencode]; !ok {
+		t.Skip("opencode builder not registered: run with opencode subpackage imported")
+	}
 	b, err := NewBackend(string(TypeOpencode), BackendConfig{
 		Type: TypeOpencode, Enabled: true, AutoStart: false,
 	})

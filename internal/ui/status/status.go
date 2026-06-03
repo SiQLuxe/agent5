@@ -12,6 +12,7 @@ type StatusBar struct {
 	mode      string
 	tasks     int
 	connected bool
+	message   string
 }
 
 func New() *StatusBar {
@@ -43,7 +44,21 @@ func (s *StatusBar) SetBackgroundColor(color tcell.Color) {
 	s.TextView.SetBackgroundColor(color)
 }
 
+func (s *StatusBar) ShowMessage(msg string) {
+	s.message = msg
+	s.SetText(msg)
+}
+
+func (s *StatusBar) ClearMessage() {
+	s.message = ""
+	s.refresh()
+}
+
 func (s *StatusBar) refresh() {
+	if s.message != "" {
+		s.SetText(s.message)
+		return
+	}
 	connStr := "●"
 	if !s.connected {
 		connStr = "○"
