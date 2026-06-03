@@ -16,6 +16,7 @@ const (
 	TaskCode       TaskType = "code"
 	TaskReview     TaskType = "review"
 	TaskExecute    TaskType = "execute"
+	TaskExternal   TaskType = "external"
 )
 
 const (
