@@ -25,6 +25,19 @@ type UIConfig struct {
 	MaxVisibleLines int `toml:"max_visible_lines"`
 }
 
+type AgentBackendConfig struct {
+	Type      string `toml:"type"`
+	Enabled   bool   `toml:"enabled"`
+	AutoStart bool   `toml:"auto_start"`
+	Binary    string `toml:"binary"`
+	APIURL    string `toml:"api_url,omitempty"`
+	APIKey    string `toml:"api_key,omitempty"`
+}
+
+type AgentConfig struct {
+	Backends map[string]AgentBackendConfig `toml:"backends"`
+}
+
 type Config struct {
 	Models        ModelsConfig `toml:"models"`
 	DefaultClient string       `toml:"default_client"`
@@ -32,6 +45,7 @@ type Config struct {
 	ApprovalMode  string       `toml:"approval_mode"`
 	MaxSubagents  int          `toml:"max_subagents"`
 	UI            UIConfig     `toml:"ui"`
+	Agent         AgentConfig  `toml:"agent"`
 }
 
 func LoadConfig(path string) (*Config, error) {
@@ -76,6 +90,15 @@ func GetDefaultConfig() *Config {
 		MaxSubagents:  3,
 		UI: UIConfig{
 			MaxVisibleLines: 8,
+		},
+		Agent: AgentConfig{
+			Backends: map[string]AgentBackendConfig{
+				"opencode": {
+					Type:      "opencode",
+					Enabled:   false,
+					AutoStart: true,
+				},
+			},
 		},
 	}
 }
