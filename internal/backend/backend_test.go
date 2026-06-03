@@ -20,16 +20,16 @@ func TestAgentTypes(t *testing.T) {
 func TestSessionModel(t *testing.T) {
 	now := time.Now()
 	s := Session{
-		ID: "sess-1", Title: "test", CreatedAt: now, Status: "active",
+		ID: "sess-1", Title: "test", CreatedAt: now, Status: SessionActive,
 	}
-	if s.ID != "sess-1" || s.Title != "test" || s.Status != "active" {
+	if s.ID != "sess-1" || s.Title != "test" || s.Status != SessionActive {
 		t.Errorf("Session fields not set correctly")
 	}
 }
 
 func TestMessageModel(t *testing.T) {
-	m := Message{Role: "user", Content: "hello"}
-	if m.Role != "user" || m.Content != "hello" {
+	m := Message{Role: RoleUser, Content: "hello"}
+	if m.Role != RoleUser || m.Content != "hello" {
 		t.Errorf("Message fields not set correctly")
 	}
 }
