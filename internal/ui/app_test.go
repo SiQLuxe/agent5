@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/gdamore/tcell/v2"
@@ -705,5 +706,99 @@ func TestCommandPaletteHasSkillsCategory(t *testing.T) {
 	itemCount := a.commandPalette.GetItemCount()
 	if itemCount < 1 {
 		t.Fatal("expected at least 1 skill in palette")
+	}
+}
+
+func TestSlashShowsAllCommands(t *testing.T) {
+	a := NewApp()
+	if a.commandRegistry == nil {
+		t.Fatal("expected command registry")
+	}
+	a.onComposerChange("/")
+	if !a.suggestionMenu.Visible() {
+		t.Fatal("expected suggestion menu visible when typing /")
+	}
+	if a.suggestionMenu.Height() <= 2 {
+		t.Fatal("expected menu with items")
+	}
+}
+
+func TestSlashFiltering(t *testing.T) {
+	a := NewApp()
+	a.onComposerChange("/Se")
+	if !a.suggestionMenu.Visible() {
+		t.Fatal("expected menu visible")
+	}
+	sel := a.suggestionMenu.Selected()
+	if sel == nil || sel.Name != "Search" {
+		t.Fatalf("expected first match 'Search', got %v", sel)
+	}
+}
+
+func TestSlashEnterFillsCommand(t *testing.T) {
+	a := NewApp()
+	a.onComposerChange("/Se")
+	ev := tcell.NewEventKey(tcell.KeyEnter, 0, tcell.ModNone)
+	result := a.handleInput(ev)
+	if result != nil {
+		t.Fatal("expected Enter consumed (nil)")
+	}
+	if !strings.HasPrefix(a.composer.GetInput(), "/Search ") {
+		t.Fatalf("expected composer to contain '/Search ', got %q", a.composer.GetInput())
+	}
+	if a.suggestionMenu.Visible() {
+		t.Fatal("expected menu hidden after fill")
+	}
+}
+
+func TestSlashNoSlashHides(t *testing.T) {
+	a := NewApp()
+	a.onComposerChange("/")
+	if !a.suggestionMenu.Visible() {
+		t.Fatal("expected menu visible with /")
+	}
+	a.onComposerChange("hello")
+	if a.suggestionMenu.Visible() {
+		t.Fatal("expected menu hidden without / prefix")
+	}
+}
+
+func TestSlashNoMatchHides(t *testing.T) {
+	a := NewApp()
+	a.onComposerChange("/zzz_nonexistent")
+	if a.suggestionMenu.Visible() {
+		t.Fatal("expected menu hidden when no match")
+	}
+}
+
+func TestSlashEscHides(t *testing.T) {
+	a := NewApp()
+	a.onComposerChange("/")
+	if !a.suggestionMenu.Visible() {
+		t.Fatal("expected menu visible")
+	}
+	ev := tcell.NewEventKey(tcell.KeyEsc, 0, tcell.ModNone)
+	result := a.handleInput(ev)
+	if result != nil {
+		t.Fatal("expected Esc consumed (nil)")
+	}
+	if a.suggestionMenu.Visible() {
+		t.Fatal("expected menu hidden after Esc")
+	}
+}
+
+func TestSlashIncludesBuiltins(t *testing.T) {
+	a := NewApp()
+	a.onComposerChange("/")
+	cmds := a.suggestionMenu.Filtered()
+	found := false
+	for _, c := range cmds {
+		if c.Name == "New Session" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatal("expected 'New Session' builtin in suggestion results")
 	}
 }
