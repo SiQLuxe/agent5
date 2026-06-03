@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"sync"
 	"time"
@@ -45,16 +46,20 @@ func (b *OpencodeBackend) Name() string {
 
 func (b *OpencodeBackend) Start(ctx context.Context) error {
 	if b.config.AutoStart {
-		args := []string{"serve"}
+		port, err := findFreePort()
+		if err != nil {
+			return fmt.Errorf("find free port: %w", err)
+		}
+		args := []string{"serve", "--port", fmt.Sprintf("%d", port)}
 		binary := b.config.Binary
 		if binary == "" {
 			binary = "opencode"
 		}
+		b.baseURL = fmt.Sprintf("http://127.0.0.1:%d", port)
 		b.procMgr = backend.NewProcessManager(binary, args, nil)
 		if err := b.procMgr.Start(ctx); err != nil {
 			return fmt.Errorf("failed to start opencode: %w", err)
 		}
-		b.baseURL = "http://127.0.0.1:4096"
 	} else {
 		b.baseURL = b.config.APIURL
 	}
@@ -69,10 +74,22 @@ func (b *OpencodeBackend) Start(ctx context.Context) error {
 	return nil
 }
 
+func findFreePort() (int, error) {
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		return 0, err
+	}
+	addr := listener.Addr().(*net.TCPAddr)
+	listener.Close()
+	return addr.Port, nil
+}
+
 func (b *OpencodeBackend) Stop(ctx context.Context) error {
+	b.mu.Lock()
 	if b.sseConn != nil {
 		b.sseConn.Close()
 	}
+	b.mu.Unlock()
 	if b.procMgr != nil {
 		return b.procMgr.Stop(ctx)
 	}

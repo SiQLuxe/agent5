@@ -2,7 +2,6 @@ package opencode
 
 import (
 	"context"
-	"fmt"
 
 	"github.com/example/agent-tui/internal/backend"
 )
@@ -56,32 +55,7 @@ func (b *OpencodeBackend) SendMessageStream(ctx context.Context, sessionID strin
 		return err
 	}
 
-	events, err := b.Events(ctx)
-	if err != nil {
-		return err
-	}
-
-	for event := range events {
-		if event.Type == "message.completed" {
-			payload, ok := event.Payload.(map[string]interface{})
-			if ok {
-				if content, exists := payload["content"]; exists {
-					onChunk(&backend.Chunk{Content: fmt.Sprintf("%v", content), Done: false})
-				}
-			}
-			onChunk(&backend.Chunk{Done: true})
-			return nil
-		}
-		if event.Type == "message.chunk" {
-			payload, ok := event.Payload.(map[string]interface{})
-			if ok {
-				if content, exists := payload["content"]; exists {
-					onChunk(&backend.Chunk{Content: fmt.Sprintf("%v", content), Done: false})
-				}
-			}
-		}
-	}
-	return nil
+	return b.sendMessageStreamViaSSE(ctx, sessionID, onChunk)
 }
 
 func (b *OpencodeBackend) GetMessages(ctx context.Context, sessionID string) ([]*backend.Message, error) {

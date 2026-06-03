@@ -3,6 +3,10 @@ package main
 import (
 	"context"
 	"log"
+	"os"
+	"os/signal"
+	"syscall"
+	"time"
 
 	"github.com/example/agent-tui/internal/ai"
 	"github.com/example/agent-tui/internal/backend"
@@ -68,7 +72,7 @@ func main() {
 			continue
 		}
 		backendRegistry.Register(backend.AgentType(bc.Type), b)
-		_ = service.NewExternalAgent(b) // available for future orchestrator integration
+		_ = service.NewExternalAgent(b)
 	}
 
 	// Start reverse-control server
@@ -77,6 +81,21 @@ func main() {
 		if err := ctrlServer.Start(context.Background(), ":0"); err != nil {
 			log.Printf("control server exited: %v", err)
 		}
+	}()
+
+	// Graceful shutdown on SIGINT/SIGTERM
+	sigCh := make(chan os.Signal, 1)
+	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
+	go func() {
+		<-sigCh
+		log.Println("shutting down...")
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		for _, b := range backendRegistry.GetAll() {
+			b.Stop(shutdownCtx)
+		}
+		ctrlServer.Stop(shutdownCtx)
+		app.Stop()
 	}()
 
 	app.StartSkillWatcher()
