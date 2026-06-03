@@ -1,17 +1,17 @@
 package opencode
 
 import (
+	"bytes"
 	"context"
-	"errors"
+	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"sync"
 	"time"
 
 	"github.com/example/agent-tui/internal/backend"
 )
-
-var errNotImplemented = errors.New("not implemented")
 
 type Config struct {
 	Binary    string `json:"binary"`
@@ -31,7 +31,8 @@ type OpencodeBackend struct {
 
 func NewBackend(cfg Config) *OpencodeBackend {
 	return &OpencodeBackend{
-		config: cfg,
+		config:  cfg,
+		baseURL: cfg.APIURL,
 		client: &http.Client{
 			Timeout: 30 * time.Second,
 		},
@@ -95,52 +96,41 @@ func (b *OpencodeBackend) Health(ctx context.Context) (*backend.HealthInfo, erro
 	return &backend.HealthInfo{Healthy: resp.StatusCode == http.StatusOK}, nil
 }
 
-func (b *OpencodeBackend) CreateSession(ctx context.Context, title string) (*backend.Session, error) {
-	return nil, errNotImplemented
-}
+func (b *OpencodeBackend) doRequest(ctx context.Context, method, path string, body, result interface{}) error {
+	url := b.baseURL + path
 
-func (b *OpencodeBackend) ListSessions(ctx context.Context) ([]*backend.Session, error) {
-	return nil, errNotImplemented
-}
+	var reqBody io.Reader
+	if body != nil {
+		data, err := json.Marshal(body)
+		if err != nil {
+			return fmt.Errorf("marshal request body: %w", err)
+		}
+		reqBody = bytes.NewReader(data)
+	}
 
-func (b *OpencodeBackend) GetSession(ctx context.Context, id string) (*backend.Session, error) {
-	return nil, errNotImplemented
-}
+	req, err := http.NewRequestWithContext(ctx, method, url, reqBody)
+	if err != nil {
+		return fmt.Errorf("create request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
 
-func (b *OpencodeBackend) DeleteSession(ctx context.Context, id string) error {
-	return errNotImplemented
-}
+	resp, err := b.client.Do(req)
+	if err != nil {
+		return fmt.Errorf("do request: %w", err)
+	}
+	defer resp.Body.Close()
 
-func (b *OpencodeBackend) SendMessage(ctx context.Context, sessionID string, msg *backend.Message) (*backend.MessageResult, error) {
-	return nil, errNotImplemented
-}
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		respBody, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("unexpected status %d: %s", resp.StatusCode, string(respBody))
+	}
 
-func (b *OpencodeBackend) SendMessageStream(ctx context.Context, sessionID string, msg *backend.Message, onChunk func(*backend.Chunk)) error {
-	return errNotImplemented
-}
-
-func (b *OpencodeBackend) GetMessages(ctx context.Context, sessionID string) ([]*backend.Message, error) {
-	return nil, errNotImplemented
-}
-
-func (b *OpencodeBackend) ExecuteCommand(ctx context.Context, sessionID string, command string) (*backend.CommandResult, error) {
-	return nil, errNotImplemented
-}
-
-func (b *OpencodeBackend) ExecuteShell(ctx context.Context, command string) (*backend.CommandResult, error) {
-	return nil, errNotImplemented
-}
-
-func (b *OpencodeBackend) ReadFile(ctx context.Context, path string) (string, error) {
-	return "", errNotImplemented
-}
-
-func (b *OpencodeBackend) SearchText(ctx context.Context, pattern string) ([]backend.SearchResult, error) {
-	return nil, errNotImplemented
-}
-
-func (b *OpencodeBackend) Events(ctx context.Context) (<-chan *backend.Event, error) {
-	return nil, errNotImplemented
+	if result != nil {
+		if err := json.NewDecoder(resp.Body).Decode(result); err != nil {
+			return fmt.Errorf("decode response: %w", err)
+		}
+	}
+	return nil
 }
 
 func init() {
@@ -153,9 +143,3 @@ func init() {
 		}), nil
 	})
 }
-
-type sseConnection struct {
-	closed bool
-}
-
-func (s *sseConnection) Close() {}
