@@ -1,6 +1,9 @@
 package backend
 
-import "sync"
+import (
+	"context"
+	"sync"
+)
 
 type Registry struct {
 	mu       sync.RWMutex
@@ -40,7 +43,7 @@ func (r *Registry) ActiveBackends() []AgentBackend {
 	all := r.GetAll()
 	active := make([]AgentBackend, 0, len(all))
 	for _, b := range all {
-		h, err := b.Health(nil)
+		h, err := b.Health(context.Background())
 		if err == nil && h != nil && h.Healthy {
 			active = append(active, b)
 		}
