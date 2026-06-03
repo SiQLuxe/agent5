@@ -13,6 +13,7 @@ import (
 	"github.com/example/agent-tui/internal/service"
 	"github.com/example/agent-tui/internal/ui/composer"
 	"github.com/example/agent-tui/internal/ui/status"
+	"github.com/example/agent-tui/internal/ui/suggestion"
 	"github.com/example/agent-tui/internal/ui/tabbar"
 )
 
@@ -51,8 +52,7 @@ type App struct {
 	skillExecutor   *service.SkillExecutor
 	skillRegistry   *service.SkillRegistry
 	skillsDir       string
-	suggestionList  *tview.List
-	suggestionCmds  []*service.Command
+	suggestionMenu *suggestion.SuggestionMenu
 	renameInput     *tview.InputField
 	renamePage      *tview.Flex
 }
@@ -102,13 +102,9 @@ func NewApp() *App {
 	chatFlex.AddItem(a.statusBar, 1, 0, false)
 	chatFlex.AddItem(a.chatPanel, 0, 1, false)
 	a.commandPalette = NewCommandPalette()
-	a.suggestionList = tview.NewList()
-	a.suggestionList.SetMainTextColor(tcell.ColorWhite)
-	a.suggestionList.SetSecondaryTextColor(tcell.ColorGray)
-	a.suggestionList.SetSelectedBackgroundColor(tcell.ColorOrange)
-	a.suggestionList.ShowSecondaryText(true)
+	a.suggestionMenu = suggestion.New()
+	chatFlex.AddItem(a.suggestionMenu, 0, 0, false) // hidden by default
 	chatFlex.AddItem(a.composer, 3, 0, true)
-	chatFlex.AddItem(a.suggestionList, 0, 0, false) // hidden by default
 	chatFlex.AddItem(a.tabDock, 1, 0, false)
 	a.chatFlex = chatFlex
 
@@ -269,6 +265,11 @@ func (a *App) handleInput(event *tcell.EventKey) *tcell.EventKey {
 
 	// Chat mode — global shortcuts only here
 	switch {
+	case event.Key() == tcell.KeyEsc:
+		if a.suggestionMenu.Visible() {
+			a.hideSuggestions()
+			return nil
+		}
 	case event.Key() == tcell.KeyCtrlC:
 		a.Stop()
 		return nil
@@ -282,10 +283,9 @@ func (a *App) handleInput(event *tcell.EventKey) *tcell.EventKey {
 		a.enterCommandPalette(ShowAll)
 		return nil
 	case event.Key() == tcell.KeyEnter && event.Modifiers() == tcell.ModNone:
-		if a.suggestionCmds != nil {
-			idx := a.suggestionList.GetCurrentItem()
-			if idx >= 0 && idx < len(a.suggestionCmds) {
-				cmd := a.suggestionCmds[idx]
+		if a.suggestionMenu.Visible() {
+			cmd := a.suggestionMenu.Selected()
+			if cmd != nil {
 				a.composer.SetInput("/" + cmd.Name + " ")
 				a.hideSuggestions()
 			}
@@ -302,10 +302,9 @@ func (a *App) handleInput(event *tcell.EventKey) *tcell.EventKey {
 	case event.Key() == tcell.KeyEnter && (event.Modifiers()&tcell.ModCtrl != 0 || event.Modifiers()&tcell.ModAlt != 0):
 		// Ctrl+Enter or Alt+Enter: insert newline (let fall through to TextArea)
 		return event
-	case event.Key() == tcell.KeyTab && a.suggestionCmds != nil:
-		idx := a.suggestionList.GetCurrentItem()
-		if idx >= 0 && idx < len(a.suggestionCmds) {
-			cmd := a.suggestionCmds[idx]
+	case event.Key() == tcell.KeyTab && a.suggestionMenu.Visible():
+		cmd := a.suggestionMenu.Selected()
+		if cmd != nil {
 			a.composer.SetInput("/" + cmd.Name + " ")
 			a.hideSuggestions()
 		}
@@ -323,11 +322,8 @@ func (a *App) handleInput(event *tcell.EventKey) *tcell.EventKey {
 		a.chatPanel.ScrollToBottom()
 		return nil
 	case event.Key() == tcell.KeyUp:
-		if len(a.suggestionCmds) > 0 {
-			idx := a.suggestionList.GetCurrentItem()
-			if idx > 0 {
-				a.suggestionList.SetCurrentItem(idx - 1)
-			}
+		if a.suggestionMenu.Visible() {
+			a.suggestionMenu.SelectPrev()
 		} else if a.historyIndex < len(a.inputHistory) {
 			a.historyIndex++
 			idx := len(a.inputHistory) - a.historyIndex
@@ -335,11 +331,8 @@ func (a *App) handleInput(event *tcell.EventKey) *tcell.EventKey {
 		}
 		return nil
 	case event.Key() == tcell.KeyDown:
-		if len(a.suggestionCmds) > 0 {
-			idx := a.suggestionList.GetCurrentItem()
-			if idx < a.suggestionList.GetItemCount()-1 {
-				a.suggestionList.SetCurrentItem(idx + 1)
-			}
+		if a.suggestionMenu.Visible() {
+			a.suggestionMenu.SelectNext()
 		} else if a.historyIndex > 0 {
 			a.historyIndex--
 			if a.historyIndex == 0 {
@@ -631,37 +624,32 @@ func (a *App) onComposerChange(text string) {
 		prefix := strings.TrimPrefix(text, "/")
 		var cmds []*service.Command
 		for _, c := range a.commandRegistry.List() {
-			if c.Category == service.CmdSkill && strings.HasPrefix(c.Name, prefix) {
+			if strings.HasPrefix(strings.ToLower(c.Name), strings.ToLower(prefix)) {
 				cmds = append(cmds, c)
 			}
 		}
-		if len(cmds) > 0 {
-			a.showSuggestions(cmds)
-			return
+		a.suggestionMenu.SetCommands(cmds)
+		a.suggestionMenu.SetFilter(prefix)
+		if len(a.suggestionMenu.Filtered()) > 0 {
+			a.showSuggestions()
+		} else {
+			a.hideSuggestions()
 		}
+		return
 	}
 	a.hideSuggestions()
 }
 
-func (a *App) showSuggestions(cmds []*service.Command) {
-	a.suggestionCmds = cmds
-	a.suggestionList.Clear()
-	for _, c := range cmds {
-		a.suggestionList.AddItem("/"+c.Name, c.Description, 0, nil)
-	}
-	a.suggestionList.SetCurrentItem(0)
-	a.suggestionList.SetBorder(true)
-	a.suggestionList.SetTitle(" Commands ")
-	a.chatFlex.RemoveItem(a.suggestionList)
-	a.chatFlex.AddItem(a.suggestionList, 6, 0, false)
+func (a *App) showSuggestions() {
+	a.suggestionMenu.Show()
+	a.chatFlex.RemoveItem(a.suggestionMenu)
+	a.chatFlex.AddItem(a.suggestionMenu, a.suggestionMenu.Height(), 0, false)
 }
 
 func (a *App) hideSuggestions() {
-	a.suggestionCmds = nil
-	a.suggestionList.Clear()
-	a.suggestionList.SetBorder(false)
-	a.chatFlex.RemoveItem(a.suggestionList)
-	a.chatFlex.AddItem(a.suggestionList, 0, 0, false)
+	a.suggestionMenu.Hide()
+	a.chatFlex.RemoveItem(a.suggestionMenu)
+	a.chatFlex.AddItem(a.suggestionMenu, 0, 0, false)
 }
 
 func (a *App) AddWelcomeMessage() {
