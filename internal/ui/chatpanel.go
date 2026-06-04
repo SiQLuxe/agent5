@@ -10,10 +10,12 @@ import (
 
 type ChatPanel struct {
 	*tview.TextView
-	session       *Session
-	searchQuery   string
-	searchResults []int
-	currentMatch  int
+	session        *Session
+	searchQuery    string
+	searchResults  []int
+	currentMatch   int
+	autoScroll     bool
+	renderedPrefix string
 }
 
 func NewChatPanel() *ChatPanel {
@@ -38,8 +40,66 @@ func (c *ChatPanel) refresh() {
 		c.SetText("")
 		return
 	}
+	c.renderedPrefix = ""
 	c.SetText(tview.TranslateANSI(c.session.RenderMessages(80, DefaultThemes[0].Colors)))
-	c.ScrollToEnd()
+	if c.autoScroll {
+		c.ScrollToEnd()
+	}
+}
+
+func (c *ChatPanel) StartStreaming() {
+	if c.session == nil || len(c.session.Messages) == 0 {
+		return
+	}
+	c.autoScroll = true
+	width := 80
+	contentWidth := width - 4
+	if contentWidth < 10 {
+		contentWidth = 10
+	}
+	theme := DefaultThemes[0].Colors
+	msgs := c.session.Messages[:len(c.session.Messages)-1]
+	var sb strings.Builder
+	for _, msg := range msgs {
+		renderMessageToBuilder(&sb, msg, contentWidth, theme)
+	}
+	c.renderedPrefix = sb.String()
+}
+
+func (c *ChatPanel) UpdateStreaming(content string) {
+	if c.session == nil || len(c.session.Messages) == 0 {
+		return
+	}
+	width := 80
+	contentWidth := width - 4
+	if contentWidth < 10 {
+		contentWidth = 10
+	}
+	theme := DefaultThemes[0].Colors
+	lastMsg := c.session.Messages[len(c.session.Messages)-1]
+	lastMsg.Content = content
+
+	var sb strings.Builder
+	sb.WriteString(c.renderedPrefix)
+	renderMessageToBuilder(&sb, lastMsg, contentWidth, theme)
+
+	c.SetText(tview.TranslateANSI(sb.String()))
+	if c.autoScroll {
+		c.ScrollToEnd()
+	}
+}
+
+func (c *ChatPanel) EndStreaming() {
+	c.renderedPrefix = ""
+	c.autoScroll = true
+	c.refresh()
+	if c.autoScroll {
+		c.ScrollToEnd()
+	}
+}
+
+func (c *ChatPanel) SetAutoScroll(v bool) {
+	c.autoScroll = v
 }
 
 func (c *ChatPanel) ScrollUp(lines int) {

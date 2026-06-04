@@ -595,8 +595,8 @@ func (a *App) sendMessage() {
 
 			var streamBuf string
 			results, err := a.orch.DispatchStream(task, func(chunk string) {
-				streamBuf += chunk
 				a.QueueUpdateDraw(func() {
+					streamBuf += chunk
 					if len(sessionPtr.Messages) > 0 {
 						sessionPtr.Messages[len(sessionPtr.Messages)-1].Content = streamBuf
 						a.chatPanel.UpdateStreaming(streamBuf)

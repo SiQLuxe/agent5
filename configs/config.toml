@@ -25,8 +25,8 @@ max_visible_lines = 8
 # All tools operate inside sandbox_dir to protect your project code.
 [[agent_role]]
 name = "coder"
-enabled = false  # set to true and configure tools to activate
-model = ""
+enabled = true  # set to true and configure tools to activate
+model = "deepseek-pro"
 system_prompt = "You are a Go developer. Analyze requirements, write clean code, and review your work."
 tools = ["read_file", "write_file", "search_text", "exec_command", "chat_llm"]
 max_react_loop = 10
