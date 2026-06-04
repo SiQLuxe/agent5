@@ -18,6 +18,12 @@ import (
 	"github.com/example/agent-tui/internal/ui"
 )
 
+var (
+	version = "dev"
+	commit  = "none"
+	date    = "unknown"
+)
+
 func main() {
 	cfg, err := config.LoadConfig("configs/config.toml")
 	if err != nil {
