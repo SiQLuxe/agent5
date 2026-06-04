@@ -6,7 +6,7 @@ configs/config.toml
 .history/*.db
 
 # 编译产物
-agent-tui
+/agent
 *.exe
 *.exe~
 *.dll
