@@ -165,6 +165,19 @@ func NewApp() *App {
 
 	a.SetRoot(a.pages, true)
 	a.SetInputCapture(a.handleInput)
+	a.EnableMouse(true)
+	a.SetMouseCapture(func(event *tcell.EventMouse, action tview.MouseAction) (*tcell.EventMouse, tview.MouseAction) {
+		switch action {
+		case tview.MouseScrollUp:
+			a.chatPanel.SetAutoScroll(false)
+			a.chatPanel.ScrollUp(3)
+			return nil, 0
+		case tview.MouseScrollDown:
+			a.chatPanel.ScrollDown(3)
+			return nil, 0
+		}
+		return event, action
+	})
 	a.SetFocus(a.composer)
 
 	a.applyTheme()
