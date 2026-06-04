@@ -1,7 +1,6 @@
 package ui
 
 import (
-	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -549,54 +548,75 @@ func (a *App) sendMessage() {
 	a.historyIndex = 0
 	a.hideSuggestions()
 
-	// Detect /command
-	if strings.HasPrefix(text, "/") {
-		// /agent <task> — dispatch through orchestrator
-		if a.orch != nil && strings.HasPrefix(text, "/agent ") {
-			taskDesc := strings.TrimSpace(strings.TrimPrefix(text, "/agent "))
-			a.handleAgentTask(taskDesc)
-			a.composer.ClearInput()
-			return
-		}
-		pc := service.ParseCommand(text)
-		if pc != nil && a.skillExecutor != nil {
-			s := a.activeSessionPtr()
-			if s != nil {
-				result, err := a.skillExecutor.Execute(pc)
-				if err != nil {
-					s.AddMessage(RoleSkill, "Error: "+err.Error())
-				} else {
-					s.AddMessage(RoleSkill, result)
-				}
-				s.Messages[len(s.Messages)-1].Label = pc.Name
-			}
-		}
-		a.composer.ClearInput()
-		return
-	}
-
-	if a.aiAssistant == nil {
-		return
-	}
 	s := a.activeSessionPtr()
 	if s == nil {
 		return
 	}
 
+	// /command → skill executor
+	if strings.HasPrefix(text, "/") {
+		pc := service.ParseCommand(text)
+		if pc != nil && a.skillExecutor != nil {
+			result, err := a.skillExecutor.Execute(pc)
+			if err != nil {
+				s.AddMessage(RoleSkill, "Error: "+err.Error())
+			} else {
+				s.AddMessage(RoleSkill, result)
+			}
+			s.Messages[len(s.Messages)-1].Label = pc.Name
+		}
+		a.composer.ClearInput()
+		return
+	}
+
+	// Normal text → dispatch through orchestrator (if configured), fallback to AIAssistant
+	if a.orch == nil && a.aiAssistant == nil {
+		// No agent system or AI client configured — cannot handle this message
+		return
+	}
 	s.AddMessage(RoleUser, text)
 	s.AddMessage(RoleAssistant, "")
 	a.composer.ClearInput()
 	a.chatPanel.SetSession(s)
 	a.isLoading = true
 
-	sessionID := s.ID
-	sessionPtr := s // capture session pointer for goroutine
+	sessionPtr := s
 	go func() {
+		if a.orch != nil {
+			task := &orchestrator.Task{
+				ID:      uuid.New().String(),
+				Type:    orchestrator.TaskExecute,
+				Content: text,
+			}
+			results, err := a.orch.Dispatch(task)
+			a.QueueUpdateDraw(func() {
+				a.isLoading = false
+				// Remove the placeholder assistant message
+				if len(sessionPtr.Messages) > 0 && sessionPtr.Messages[len(sessionPtr.Messages)-1].Role == RoleAssistant {
+					sessionPtr.Messages = sessionPtr.Messages[:len(sessionPtr.Messages)-1]
+				}
+				if err != nil {
+					sessionPtr.AddMessage(RoleSystem, "Agent error: "+err.Error())
+				}
+				for _, r := range results {
+					statusStr := string(r.Status)
+					header := "[" + statusStr + "] " + string(r.Type) + " (agent: " + r.AgentID + ")"
+					if r.Error != "" {
+						sessionPtr.AddMessage(RoleSkill, header+"\n"+r.Error)
+					} else if r.Result != "" {
+						sessionPtr.AddMessage(RoleSkill, header+"\n"+r.Result)
+					}
+				}
+				a.chatPanel.SetSession(sessionPtr)
+				a.chatPanel.ScrollToBottom()
+			})
+			return
+		}
+
 		var fullResponse string
-		err := a.aiAssistant.ChatStream(sessionID, text, func(chunk string) {
+		err := a.aiAssistant.ChatStream(sessionPtr.ID, text, func(chunk string) {
 			fullResponse += chunk
 			a.QueueUpdateDraw(func() {
-				// Use captured session pointer — always the correct session
 				if len(sessionPtr.Messages) > 0 {
 					sessionPtr.Messages[len(sessionPtr.Messages)-1].Content = fullResponse
 					a.chatPanel.SetSession(sessionPtr)
@@ -611,7 +631,6 @@ func (a *App) sendMessage() {
 			}
 			a.chatPanel.SetSession(sessionPtr)
 			a.chatPanel.ScrollToBottom()
-			// Update tab label after first AI response
 			label := sessionPtr.GenerateLabel()
 			if label != "New Session" {
 				sessionPtr.Label = label
@@ -681,48 +700,6 @@ func (a *App) applyTheme() {
 	a.composer.SetPromptColor(colors.InputPrompt)
 	a.composer.SetAccentColor(hexToTCell(colors.Accent))
 	a.tabDock.SetColors(tcell.ColorWhite, hexToTCell(colors.Accent), tcell.ColorGray, tcell.ColorDefault)
-}
-
-// Agent task dispatch
-
-func (a *App) handleAgentTask(taskDesc string) {
-	s := a.activeSessionPtr()
-	if s == nil {
-		return
-	}
-
-	s.AddMessage(RoleUser, taskDesc)
-	a.composer.ClearInput()
-	a.chatPanel.SetSession(s)
-	a.isLoading = true
-
-	task := &orchestrator.Task{
-		ID:      uuid.New().String(),
-		Type:    orchestrator.TaskExecute,
-		Content: taskDesc,
-	}
-
-	sessionPtr := s
-	go func() {
-		results, err := a.orch.Dispatch(task)
-		a.QueueUpdateDraw(func() {
-			a.isLoading = false
-			if err != nil {
-				sessionPtr.AddMessage(RoleSystem, fmt.Sprintf("Agent error: %s", err))
-			}
-			for _, r := range results {
-				statusStr := string(r.Status)
-				header := fmt.Sprintf("[%s] %s (agent: %s)", statusStr, r.Type, r.AgentID)
-				if r.Error != "" {
-					sessionPtr.AddMessage(RoleSkill, fmt.Sprintf("%s\n%s", header, r.Error))
-				} else if r.Result != "" {
-					sessionPtr.AddMessage(RoleSkill, fmt.Sprintf("%s\n%s", header, r.Result))
-				}
-			}
-			a.chatPanel.SetSession(sessionPtr)
-			a.chatPanel.ScrollToBottom()
-		})
-	}()
 }
 
 // Loading state (for tests)

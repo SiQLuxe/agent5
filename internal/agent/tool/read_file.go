@@ -3,6 +3,8 @@ package tool
 import (
 	"fmt"
 	"os"
+	"path/filepath"
+	"strings"
 )
 
 type ReadFileTool struct{}
@@ -25,6 +27,17 @@ func (t *ReadFileTool) Execute(ctx ToolContext, params map[string]interface{}) T
 	if !ok || path == "" {
 		return ToolResult{Error: "path parameter is required"}
 	}
+
+	if ctx.SandboxDir != "" {
+		if filepath.IsAbs(path) {
+			if !strings.HasPrefix(filepath.Clean(path), filepath.Clean(ctx.SandboxDir)) {
+				return ToolResult{Error: fmt.Sprintf("path %q is outside sandbox %q", path, ctx.SandboxDir)}
+			}
+		} else {
+			path = filepath.Join(ctx.SandboxDir, path)
+		}
+	}
+
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return ToolResult{Error: fmt.Sprintf("read file: %s", err)}

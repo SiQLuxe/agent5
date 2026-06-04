@@ -11,6 +11,7 @@ type Config struct {
 	MaxReActLoop int
 	Temperature  float64
 	ContextLimit int
+	SandboxDir   string
 }
 
 type Agent struct {

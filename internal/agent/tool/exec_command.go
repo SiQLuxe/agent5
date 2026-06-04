@@ -37,6 +37,9 @@ func (t *ExecCommandTool) Execute(ctx ToolContext, params map[string]interface{}
 	}
 
 	cmd := exec.CommandContext(ctx.Context, "sh", "-c", cmdStr)
+	if ctx.SandboxDir != "" {
+		cmd.Dir = ctx.SandboxDir
+	}
 	var stdout, stderr strings.Builder
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr

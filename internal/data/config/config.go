@@ -45,6 +45,7 @@ type AgentRoleConfig struct {
 	SystemPrompt string   `toml:"system_prompt"`
 	Tools        []string `toml:"tools"`
 	MaxReActLoop int      `toml:"max_react_loop"`
+	SandboxDir   string   `toml:"sandbox_dir"`
 }
 
 type Config struct {

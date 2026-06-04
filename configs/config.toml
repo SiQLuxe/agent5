@@ -21,7 +21,8 @@ default_model = "deepseek-chat"
 max_visible_lines = 8
 
 # Example agent roles for the agent system
-# Once configured, type "/agent <task>" in the TUI to dispatch through the orchestrator
+# When enabled, normal chat is automatically dispatched through the orchestrator.
+# All tools operate inside sandbox_dir to protect your project code.
 [[agent_role]]
 name = "coder"
 enabled = false  # set to true and configure tools to activate
@@ -29,3 +30,4 @@ model = ""
 system_prompt = "You are a Go developer. Analyze requirements, write clean code, and review your work."
 tools = ["read_file", "write_file", "search_text", "exec_command", "chat_llm"]
 max_react_loop = 10
+sandbox_dir = "/tmp/agent-sandbox"  # all file operations restricted to this directory

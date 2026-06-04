@@ -123,6 +123,7 @@ func main() {
 			Model:        ac.Model,
 			SystemPrompt: ac.SystemPrompt,
 			MaxReActLoop: ac.MaxReActLoop,
+			SandboxDir:   ac.SandboxDir,
 		}, agentTools, agentLLM)
 		agentReg.Register(ac.Name, agent,
 			string(orchestrator.TaskAnalyze),

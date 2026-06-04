@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 )
 
 type WriteFileTool struct{}
@@ -27,6 +28,16 @@ func (t *WriteFileTool) Execute(ctx ToolContext, params map[string]interface{}) 
 	content, _ := params["content"].(string)
 	if path == "" {
 		return ToolResult{Error: "path parameter is required"}
+	}
+
+	if ctx.SandboxDir != "" {
+		if filepath.IsAbs(path) {
+			if !strings.HasPrefix(filepath.Clean(path), filepath.Clean(ctx.SandboxDir)) {
+				return ToolResult{Error: fmt.Sprintf("path %q is outside sandbox %q", path, ctx.SandboxDir)}
+			}
+		} else {
+			path = filepath.Join(ctx.SandboxDir, path)
+		}
 	}
 
 	dir := filepath.Dir(path)

@@ -35,7 +35,10 @@ func (a *Agent) reactLoop(task string) (string, error) {
 			}
 
 			toolStart := time.Now()
-			tc := tool.ToolContext{Context: nil}
+			tc := tool.ToolContext{
+				Context:    nil,
+				SandboxDir: a.Config.SandboxDir,
+			}
 			result := t.Execute(tc, resp.ToolCall.Arguments)
 			a.Logger.Log("tool_result", fmt.Sprintf("%+v", result.Data), resp.ToolCall.Name, resp.ToolCall.Arguments, &result, time.Since(toolStart))
 

@@ -41,9 +41,12 @@ func (t *SearchTextTool) Execute(ctx ToolContext, params map[string]interface{})
 		return ToolResult{Error: fmt.Sprintf("invalid pattern: %s", err)}
 	}
 
-	cwd, _ := os.Getwd()
+	root := ctx.SandboxDir
+	if root == "" {
+		root, _ = os.Getwd()
+	}
 	var matches []SearchMatch
-	filepath.Walk(cwd, func(path string, info os.FileInfo, err error) error {
+	filepath.Walk(root, func(path string, info os.FileInfo, err error) error {
 		if err != nil || info.IsDir() {
 			return nil
 		}
@@ -61,7 +64,7 @@ func (t *SearchTextTool) Execute(ctx ToolContext, params map[string]interface{})
 		lines := regexp.MustCompile(`\n`).Split(string(data), -1)
 		for i, line := range lines {
 			if re.MatchString(line) {
-				rel, _ := filepath.Rel(cwd, path)
+				rel, _ := filepath.Rel(root, path)
 				matches = append(matches, SearchMatch{
 					Path:       rel,
 					LineNumber: i + 1,
