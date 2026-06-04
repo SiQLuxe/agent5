@@ -9,6 +9,9 @@ import (
 	"time"
 
 	"github.com/example/agent-tui/internal/ai"
+	"github.com/example/agent-tui/internal/agent/orchestrator"
+	"github.com/example/agent-tui/internal/agent/runtime"
+	"github.com/example/agent-tui/internal/agent/tool"
 	"github.com/example/agent-tui/internal/backend"
 	_ "github.com/example/agent-tui/internal/backend/opencode"
 	"github.com/example/agent-tui/internal/data/config"
@@ -17,6 +20,58 @@ import (
 	"github.com/example/agent-tui/internal/service"
 	"github.com/example/agent-tui/internal/ui"
 )
+
+// aiLLMAdapter wraps ai.Client to implement runtime.LLMClient
+type aiLLMAdapter struct {
+	client ai.Client
+	model  string
+}
+
+func (a *aiLLMAdapter) ChatWithTools(msgs []runtime.Message, tools []map[string]interface{}, model string) (*runtime.LLMResponse, error) {
+	if model == "" {
+		model = a.model
+	}
+	req := ai.ChatCompletionRequest{
+		Model:    model,
+		Messages: make([]ai.Message, len(msgs)),
+	}
+	for i, m := range msgs {
+		req.Messages[i] = ai.Message{Role: m.Role, Content: m.Content}
+	}
+	resp, err := a.client.ChatCompletion(req)
+	if err != nil {
+		return nil, err
+	}
+	if len(resp.Choices) == 0 {
+		return &runtime.LLMResponse{Type: "final", Content: ""}, nil
+	}
+	return &runtime.LLMResponse{Type: "final", Content: resp.Choices[0].Message.Content}, nil
+}
+
+// aiLLMProvider wraps ai.Client to implement tool.LLMProvider
+type aiLLMProvider struct {
+	client ai.Client
+}
+
+func (p *aiLLMProvider) Chat(model, systemPrompt, userPrompt string) (string, error) {
+	messages := []ai.Message{}
+	if systemPrompt != "" {
+		messages = append(messages, ai.Message{Role: "system", Content: systemPrompt})
+	}
+	messages = append(messages, ai.Message{Role: "user", Content: userPrompt})
+	req := ai.ChatCompletionRequest{
+		Model:    model,
+		Messages: messages,
+	}
+	resp, err := p.client.ChatCompletion(req)
+	if err != nil {
+		return "", err
+	}
+	if len(resp.Choices) == 0 {
+		return "", nil
+	}
+	return resp.Choices[0].Message.Content, nil
+}
 
 var (
 	version = "dev"
@@ -40,6 +95,45 @@ func main() {
 
 	h := history.NewHistory("")
 	aiAssistant := service.NewAIAssistant(aiClient, h)
+
+	// Initialize agent system
+	toolReg := tool.NewRegistry()
+	toolReg.Register(&tool.ReadFileTool{})
+	toolReg.Register(&tool.WriteFileTool{})
+	toolReg.Register(&tool.SearchTextTool{})
+	toolReg.Register(&tool.ExecCommandTool{})
+	if aiClient != nil {
+		toolReg.Register(&tool.ChatLLMTool{Provider: &aiLLMProvider{client: aiClient}})
+	}
+
+	agentLLM := &aiLLMAdapter{client: aiClient, model: cfg.DefaultClient}
+	agentReg := orchestrator.NewRegistry()
+	for _, ac := range cfg.AgentRoles {
+		if !ac.Enabled {
+			continue
+		}
+		agentTools := tool.NewRegistry()
+		for _, name := range ac.Tools {
+			if t, ok := toolReg.Get(name); ok {
+				agentTools.Register(t)
+			}
+		}
+		agent := runtime.NewAgent(runtime.Config{
+			Name:         ac.Name,
+			Model:        ac.Model,
+			SystemPrompt: ac.SystemPrompt,
+			MaxReActLoop: ac.MaxReActLoop,
+		}, agentTools, agentLLM)
+		agentReg.Register(ac.Name, agent,
+			string(orchestrator.TaskAnalyze),
+			string(orchestrator.TaskDesign),
+			string(orchestrator.TaskCode),
+			string(orchestrator.TaskReview),
+		)
+	}
+	orch := orchestrator.NewOrchestrator(agentReg, orchestrator.NewDecomposer(), orchestrator.NewMerger())
+	_ = orch
+
 	skillRegistry := service.NewSkillRegistry()
 	if err := service.LoadSkillsDir(skillRegistry, "skills"); err != nil {
 		log.Printf("warning: loading skills: %v", err)

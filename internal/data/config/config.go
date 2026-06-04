@@ -38,14 +38,24 @@ type AgentConfig struct {
 	Backends map[string]AgentBackendConfig `toml:"backends"`
 }
 
+type AgentRoleConfig struct {
+	Name         string   `toml:"name"`
+	Enabled      bool     `toml:"enabled"`
+	Model        string   `toml:"model"`
+	SystemPrompt string   `toml:"system_prompt"`
+	Tools        []string `toml:"tools"`
+	MaxReActLoop int      `toml:"max_react_loop"`
+}
+
 type Config struct {
-	Models        ModelsConfig `toml:"models"`
-	DefaultClient string       `toml:"default_client"`
-	Theme         string       `toml:"theme"`
-	ApprovalMode  string       `toml:"approval_mode"`
-	MaxSubagents  int          `toml:"max_subagents"`
-	UI            UIConfig     `toml:"ui"`
-	Agent         AgentConfig  `toml:"agent"`
+	Models        ModelsConfig        `toml:"models"`
+	DefaultClient string              `toml:"default_client"`
+	Theme         string              `toml:"theme"`
+	ApprovalMode  string              `toml:"approval_mode"`
+	MaxSubagents  int                 `toml:"max_subagents"`
+	UI            UIConfig            `toml:"ui"`
+	Agent         AgentConfig         `toml:"agent"`
+	AgentRoles    []AgentRoleConfig   `toml:"agent_role"`
 }
 
 func LoadConfig(path string) (*Config, error) {
