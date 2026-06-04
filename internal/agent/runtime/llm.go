@@ -13,6 +13,7 @@ type LLMResponse struct {
 
 type LLMClient interface {
 	ChatWithTools(messages []Message, tools []map[string]interface{}, model string) (*LLMResponse, error)
+	ChatWithToolsStream(messages []Message, tools []map[string]interface{}, model string, onChunk func(string)) (*LLMResponse, error)
 }
 
 type MockLLMClient struct {
@@ -30,5 +31,17 @@ func (m *MockLLMClient) ChatWithTools(messages []Message, tools []map[string]int
 	}
 	resp := m.Responses[m.index]
 	m.index++
+	return &resp, nil
+}
+
+func (m *MockLLMClient) ChatWithToolsStream(messages []Message, tools []map[string]interface{}, model string, onChunk func(string)) (*LLMResponse, error) {
+	if m.index >= len(m.Responses) {
+		return &LLMResponse{Type: "final", Content: "done"}, nil
+	}
+	resp := m.Responses[m.index]
+	m.index++
+	if onChunk != nil && resp.Content != "" {
+		onChunk(resp.Content)
+	}
 	return &resp, nil
 }

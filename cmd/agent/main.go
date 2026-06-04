@@ -48,6 +48,17 @@ func (a *aiLLMAdapter) ChatWithTools(msgs []runtime.Message, tools []map[string]
 	return &runtime.LLMResponse{Type: "final", Content: resp.Choices[0].Message.Content}, nil
 }
 
+func (a *aiLLMAdapter) ChatWithToolsStream(msgs []runtime.Message, tools []map[string]interface{}, model string, onChunk func(string)) (*runtime.LLMResponse, error) {
+	resp, err := a.ChatWithTools(msgs, tools, model)
+	if err != nil {
+		return nil, err
+	}
+	if onChunk != nil && resp.Content != "" {
+		onChunk(resp.Content)
+	}
+	return resp, nil
+}
+
 // aiLLMProvider wraps ai.Client to implement tool.LLMProvider
 type aiLLMProvider struct {
 	client ai.Client
