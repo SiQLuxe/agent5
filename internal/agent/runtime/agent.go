@@ -48,3 +48,9 @@ func (a *Agent) Execute(task string) (string, error) {
 	a.Logger.Clear()
 	return a.reactLoop(task)
 }
+
+func (a *Agent) ExecuteStream(task string, onChunk func(string)) (string, error) {
+	a.Memory.Clear()
+	a.Logger.Clear()
+	return a.reactLoopStream(task, onChunk)
+}
