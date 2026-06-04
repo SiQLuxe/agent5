@@ -313,15 +313,18 @@ func (a *App) handleInput(event *tcell.EventKey) *tcell.EventKey {
 		return nil
 	case event.Key() == tcell.KeyPgUp:
 		a.chatPanel.ScrollUp(10)
+		a.chatPanel.SetAutoScroll(false)
 		return nil
 	case event.Key() == tcell.KeyPgDn:
 		a.chatPanel.ScrollDown(10)
 		return nil
 	case event.Rune() == 'g' && event.Modifiers() == tcell.ModNone:
 		a.chatPanel.ScrollToTop()
+		a.chatPanel.SetAutoScroll(false)
 		return nil
 	case event.Rune() == 'G' && event.Modifiers() == tcell.ModNone:
 		a.chatPanel.ScrollToBottom()
+		a.chatPanel.SetAutoScroll(true)
 		return nil
 	case event.Key() == tcell.KeyUp:
 		if a.suggestionMenu.Visible() {
@@ -578,6 +581,7 @@ func (a *App) sendMessage() {
 	s.AddMessage(RoleAssistant, "")
 	a.composer.ClearInput()
 	a.chatPanel.SetSession(s)
+	a.chatPanel.StartStreaming()
 	a.isLoading = true
 
 	sessionPtr := s
@@ -588,7 +592,18 @@ func (a *App) sendMessage() {
 				Type:    orchestrator.TaskExecute,
 				Content: text,
 			}
-			results, err := a.orch.Dispatch(task)
+
+			var streamBuf string
+			results, err := a.orch.DispatchStream(task, func(chunk string) {
+				streamBuf += chunk
+				a.QueueUpdateDraw(func() {
+					if len(sessionPtr.Messages) > 0 {
+						sessionPtr.Messages[len(sessionPtr.Messages)-1].Content = streamBuf
+						a.chatPanel.UpdateStreaming(streamBuf)
+					}
+				})
+			})
+
 			a.QueueUpdateDraw(func() {
 				a.isLoading = false
 				// Remove the placeholder assistant message
@@ -607,8 +622,7 @@ func (a *App) sendMessage() {
 						sessionPtr.AddMessage(RoleSkill, header+"\n"+r.Result)
 					}
 				}
-				a.chatPanel.SetSession(sessionPtr)
-				a.chatPanel.ScrollToBottom()
+				a.chatPanel.EndStreaming()
 			})
 			return
 		}
@@ -619,7 +633,7 @@ func (a *App) sendMessage() {
 			a.QueueUpdateDraw(func() {
 				if len(sessionPtr.Messages) > 0 {
 					sessionPtr.Messages[len(sessionPtr.Messages)-1].Content = fullResponse
-					a.chatPanel.SetSession(sessionPtr)
+					a.chatPanel.UpdateStreaming(fullResponse)
 				}
 			})
 		})
@@ -629,8 +643,7 @@ func (a *App) sendMessage() {
 			if err != nil {
 				sessionPtr.AddMessage(RoleSystem, "Error: "+err.Error())
 			}
-			a.chatPanel.SetSession(sessionPtr)
-			a.chatPanel.ScrollToBottom()
+			a.chatPanel.EndStreaming()
 			label := sessionPtr.GenerateLabel()
 			if label != "New Session" {
 				sessionPtr.Label = label
