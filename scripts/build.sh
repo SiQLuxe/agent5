@@ -13,9 +13,9 @@ echo "  Commit:  $COMMIT"
 echo "  Date:    $DATE"
 
 go build -ldflags="\
-  -X main.version=$VERSION \
-  -X main.commit=$COMMIT \
-  -X main.date=$DATE" \
+-X main.version=$VERSION \
+-X main.commit=$COMMIT \
+-X main.date=$DATE" \
   -o agent ./cmd/agent
 
 echo "Done: ./agent"
