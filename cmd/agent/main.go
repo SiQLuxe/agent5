@@ -126,6 +126,7 @@ func main() {
 			SandboxDir:   ac.SandboxDir,
 		}, agentTools, agentLLM)
 		agentReg.Register(ac.Name, agent,
+			string(orchestrator.TaskExecute),
 			string(orchestrator.TaskAnalyze),
 			string(orchestrator.TaskDesign),
 			string(orchestrator.TaskCode),
