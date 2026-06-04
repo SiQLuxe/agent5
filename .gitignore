@@ -7,6 +7,7 @@ configs/config.toml
 
 # 编译产物
 /agent
+build/
 *.exe
 *.exe~
 *.dll

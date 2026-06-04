@@ -12,10 +12,11 @@ echo "  Version: $VERSION"
 echo "  Commit:  $COMMIT"
 echo "  Date:    $DATE"
 
+mkdir -p "$ROOT/build"
 go build -ldflags="\
 -X main.version=$VERSION \
 -X main.commit=$COMMIT \
 -X main.date=$DATE" \
-  -o agent ./cmd/agent
+  -o "$ROOT/build/agent" ./cmd/agent
 
-echo "Done: ./agent"
+echo "Done: $ROOT/build/agent"

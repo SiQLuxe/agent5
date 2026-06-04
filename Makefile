@@ -1,22 +1,20 @@
-BINARY := /tmp/agent-tui/agent
-SANDBOX := /tmp/agent-tui/sandbox
+BINARY := build/agent
+VERSION := $(shell git describe --tags --always --dirty 2>/dev/null || echo "dev")
+COMMIT := $(shell git rev-parse --short HEAD 2>/dev/null || echo "none")
+DATE := $(shell date -u +%Y-%m-%dT%H:%M:%SZ)
 
 .PHONY: build run test clean
 
-build: clean-root-binary
-	@mkdir -p /tmp/agent-tui 2>/dev/null || true
-	go build -o $(BINARY) ./cmd/agent
-	@echo "Built: $(BINARY)  (sandbox: $(SANDBOX))"
-
-clean-root-binary:
-	@rm -f ./agent
+build:
+	go build -ldflags="-X main.version=$(VERSION) -X main.commit=$(COMMIT) -X main.date=$(DATE)" -o $(BINARY) ./cmd/agent
+	@echo "Built: $(BINARY)  (version: $(VERSION))"
 
 run: build
-	SANDBOX_DIR=$(SANDBOX) $(BINARY)
+	$(BINARY)
 
 test:
 	go test -count=1 -short ./...
 	go test -race -count=1 -short ./...
 
 clean:
-	rm -rf /tmp/agent-tui
+	rm -rf build/
