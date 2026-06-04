@@ -49,14 +49,26 @@ func (a *aiLLMAdapter) ChatWithTools(msgs []runtime.Message, tools []map[string]
 }
 
 func (a *aiLLMAdapter) ChatWithToolsStream(msgs []runtime.Message, tools []map[string]interface{}, model string, onChunk func(string)) (*runtime.LLMResponse, error) {
-	resp, err := a.ChatWithTools(msgs, tools, model)
+	if model == "" {
+		model = a.model
+	}
+	req := ai.ChatCompletionRequest{
+		Model:    model,
+		Messages: make([]ai.Message, len(msgs)),
+		Stream:   true,
+	}
+	for i, m := range msgs {
+		req.Messages[i] = ai.Message{Role: m.Role, Content: m.Content}
+	}
+	var fullContent string
+	err := a.client.ChatCompletionStream(req, func(chunk string) {
+		fullContent += chunk
+		onChunk(chunk)
+	})
 	if err != nil {
 		return nil, err
 	}
-	if onChunk != nil && resp.Content != "" {
-		onChunk(resp.Content)
-	}
-	return resp, nil
+	return &runtime.LLMResponse{Type: "final", Content: fullContent}, nil
 }
 
 // aiLLMProvider wraps ai.Client to implement tool.LLMProvider
