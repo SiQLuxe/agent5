@@ -19,3 +19,13 @@ default_model = "deepseek-chat"
 
 [ui]
 max_visible_lines = 8
+
+# Example agent roles for the agent system
+# Once configured, type "/agent <task>" in the TUI to dispatch through the orchestrator
+[[agent_role]]
+name = "coder"
+enabled = false  # set to true and configure tools to activate
+model = ""
+system_prompt = "You are a Go developer. Analyze requirements, write clean code, and review your work."
+tools = ["read_file", "write_file", "search_text", "exec_command", "chat_llm"]
+max_react_loop = 10

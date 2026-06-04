@@ -132,7 +132,6 @@ func main() {
 		)
 	}
 	orch := orchestrator.NewOrchestrator(agentReg, orchestrator.NewDecomposer(), orchestrator.NewMerger())
-	_ = orch
 
 	skillRegistry := service.NewSkillRegistry()
 	if err := service.LoadSkillsDir(skillRegistry, "skills"); err != nil {
@@ -145,6 +144,7 @@ func main() {
 	app.SetSkillExecutor(skillExecutor)
 	app.SetSkillRegistry(skillRegistry)
 	app.SetSkillsDir("skills")
+	app.SetOrchestrator(orch)
 
 	// Sync skills into command registry
 	app.CommandRegistry().SyncSkills(skillRegistry)

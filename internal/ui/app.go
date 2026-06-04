@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -10,6 +11,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/rivo/tview"
 
+	"github.com/example/agent-tui/internal/agent/orchestrator"
 	"github.com/example/agent-tui/internal/service"
 	"github.com/example/agent-tui/internal/ui/composer"
 	"github.com/example/agent-tui/internal/ui/status"
@@ -55,6 +57,7 @@ type App struct {
 	suggestionMenu *suggestion.SuggestionMenu
 	renameInput     *tview.InputField
 	renamePage      *tview.Flex
+	orch            *orchestrator.Orchestrator
 }
 
 func NewApp() *App {
@@ -548,6 +551,13 @@ func (a *App) sendMessage() {
 
 	// Detect /command
 	if strings.HasPrefix(text, "/") {
+		// /agent <task> — dispatch through orchestrator
+		if a.orch != nil && strings.HasPrefix(text, "/agent ") {
+			taskDesc := strings.TrimSpace(strings.TrimPrefix(text, "/agent "))
+			a.handleAgentTask(taskDesc)
+			a.composer.ClearInput()
+			return
+		}
 		pc := service.ParseCommand(text)
 		if pc != nil && a.skillExecutor != nil {
 			s := a.activeSessionPtr()
@@ -673,6 +683,48 @@ func (a *App) applyTheme() {
 	a.tabDock.SetColors(tcell.ColorWhite, hexToTCell(colors.Accent), tcell.ColorGray, tcell.ColorDefault)
 }
 
+// Agent task dispatch
+
+func (a *App) handleAgentTask(taskDesc string) {
+	s := a.activeSessionPtr()
+	if s == nil {
+		return
+	}
+
+	s.AddMessage(RoleUser, taskDesc)
+	a.composer.ClearInput()
+	a.chatPanel.SetSession(s)
+	a.isLoading = true
+
+	task := &orchestrator.Task{
+		ID:      uuid.New().String(),
+		Type:    orchestrator.TaskExecute,
+		Content: taskDesc,
+	}
+
+	sessionPtr := s
+	go func() {
+		results, err := a.orch.Dispatch(task)
+		a.QueueUpdateDraw(func() {
+			a.isLoading = false
+			if err != nil {
+				sessionPtr.AddMessage(RoleSystem, fmt.Sprintf("Agent error: %s", err))
+			}
+			for _, r := range results {
+				statusStr := string(r.Status)
+				header := fmt.Sprintf("[%s] %s (agent: %s)", statusStr, r.Type, r.AgentID)
+				if r.Error != "" {
+					sessionPtr.AddMessage(RoleSkill, fmt.Sprintf("%s\n%s", header, r.Error))
+				} else if r.Result != "" {
+					sessionPtr.AddMessage(RoleSkill, fmt.Sprintf("%s\n%s", header, r.Result))
+				}
+			}
+			a.chatPanel.SetSession(sessionPtr)
+			a.chatPanel.ScrollToBottom()
+		})
+	}()
+}
+
 // Loading state (for tests)
 
 func (a *App) SetLoading(v bool) {
@@ -760,6 +812,10 @@ func (a *App) ExecuteCommand(command string) {
 
 func (a *App) CommandRegistry() *service.CommandRegistry {
 	return a.commandRegistry
+}
+
+func (a *App) SetOrchestrator(orch *orchestrator.Orchestrator) {
+	a.orch = orch
 }
 
 func (a *App) SetSkillExecutor(executor *service.SkillExecutor) {
