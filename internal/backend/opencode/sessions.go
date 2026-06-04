@@ -7,10 +7,8 @@ import (
 )
 
 type opencodeSession struct {
-	ID        string `json:"id"`
-	Title     string `json:"title"`
-	CreatedAt string `json:"created_at"`
-	Status    string `json:"status"`
+	ID    string `json:"id"`
+	Title string `json:"title"`
 }
 
 func (b *OpencodeBackend) CreateSession(ctx context.Context, title string) (*backend.Session, error) {
@@ -47,10 +45,8 @@ func (b *OpencodeBackend) DeleteSession(ctx context.Context, id string) error {
 }
 
 func mapSession(os *opencodeSession) *backend.Session {
-	s := &backend.Session{
-		ID:     os.ID,
-		Title:  os.Title,
-		Status: backend.SessionStatus(os.Status),
+	return &backend.Session{
+		ID:    os.ID,
+		Title: os.Title,
 	}
-	return s
 }

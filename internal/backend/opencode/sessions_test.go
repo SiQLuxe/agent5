@@ -16,7 +16,7 @@ func setupSessionsServer() (*httptest.Server, *OpencodeBackend) {
 		switch r.Method {
 		case "GET":
 			json.NewEncoder(w).Encode([]opencodeSession{
-				{ID: "s1", Title: "test", Status: "active"},
+				{ID: "s1", Title: "test"},
 			})
 		case "POST":
 			var s opencodeSession
@@ -26,7 +26,7 @@ func setupSessionsServer() (*httptest.Server, *OpencodeBackend) {
 		}
 	})
 	mux.HandleFunc("/session/", func(w http.ResponseWriter, r *http.Request) {
-		json.NewEncoder(w).Encode(&opencodeSession{ID: "s1", Title: "test", Status: "active"})
+		json.NewEncoder(w).Encode(&opencodeSession{ID: "s1", Title: "test"})
 	})
 
 	b := NewBackend(Config{AutoStart: false, APIURL: srv.URL})

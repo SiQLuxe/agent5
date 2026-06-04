@@ -20,6 +20,7 @@ type ProcessManager struct {
 	env     []string
 	stdout  io.Writer
 	stderr  io.Writer
+	workDir string
 
 	mu           sync.Mutex
 	cmd          *exec.Cmd
@@ -35,12 +36,19 @@ func NewProcessManager(name string, args []string, env []string) *ProcessManager
 	}
 }
 
+func (pm *ProcessManager) SetDir(dir string) {
+	pm.workDir = dir
+}
+
 func (pm *ProcessManager) Start(ctx context.Context) error {
 	pm.mu.Lock()
 	defer pm.mu.Unlock()
 
 	cmd := exec.CommandContext(ctx, pm.cmdName, pm.cmdArgs...)
 	cmd.Env = pm.env
+	if pm.workDir != "" {
+		cmd.Dir = pm.workDir
+	}
 	if pm.stdout != nil {
 		cmd.Stdout = pm.stdout
 	}

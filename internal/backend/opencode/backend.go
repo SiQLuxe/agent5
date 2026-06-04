@@ -19,6 +19,7 @@ type Config struct {
 	AutoStart bool   `json:"auto_start"`
 	APIURL    string `json:"api_url"`
 	APIKey    string `json:"api_key"`
+	WorkDir   string `json:"work_dir"`
 }
 
 type OpencodeBackend struct {
@@ -57,6 +58,9 @@ func (b *OpencodeBackend) Start(ctx context.Context) error {
 		}
 		b.baseURL = fmt.Sprintf("http://127.0.0.1:%d", port)
 		b.procMgr = backend.NewProcessManager(binary, args, nil)
+		if b.config.WorkDir != "" {
+			b.procMgr.SetDir(b.config.WorkDir)
+		}
 		if err := b.procMgr.Start(ctx); err != nil {
 			return fmt.Errorf("failed to start opencode: %w", err)
 		}
@@ -64,7 +68,46 @@ func (b *OpencodeBackend) Start(ctx context.Context) error {
 		b.baseURL = b.config.APIURL
 	}
 
-	h, err := b.Health(ctx)
+	if err := b.waitForHealth(ctx); err != nil {
+		b.cleanupProcess()
+		return err
+	}
+	return nil
+}
+
+func (b *OpencodeBackend) cleanupProcess() {
+	if b.procMgr != nil {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		b.procMgr.Stop(ctx)
+		b.procMgr = nil
+	}
+}
+
+func (b *OpencodeBackend) waitForHealth(ctx context.Context) error {
+	const (
+		interval     = 500 * time.Millisecond
+		maxWait      = 15 * time.Second
+		requestLimit = 2 * time.Second
+	)
+	deadline := time.Now().Add(maxWait)
+	for time.Now().Before(deadline) {
+		checkCtx, checkCancel := context.WithTimeout(ctx, requestLimit)
+		h, err := b.Health(checkCtx)
+		checkCancel()
+		if err == nil && h.Healthy {
+			return nil
+		}
+		select {
+		case <-ctx.Done():
+			return fmt.Errorf("health check cancelled: %w", ctx.Err())
+		case <-time.After(interval):
+		}
+	}
+	// final attempt
+	finalCtx, finalCancel := context.WithTimeout(ctx, requestLimit)
+	defer finalCancel()
+	h, err := b.Health(finalCtx)
 	if err != nil {
 		return fmt.Errorf("opencode health check failed: %w", err)
 	}

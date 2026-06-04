@@ -9,7 +9,7 @@ import (
 
 type opencodeCommandBody struct {
 	Command   string `json:"command"`
-	Arguments string `json:"arguments,omitempty"`
+	Arguments string `json:"arguments"`
 }
 
 type opencodeShellBody struct {
@@ -73,9 +73,9 @@ func (b *OpencodeBackend) SearchText(ctx context.Context, pattern string) ([]bac
 	params.Set("pattern", pattern)
 
 	var matches []struct {
-		Path       string `json:"path"`
-		Lines      string `json:"lines"`
-		LineNumber int    `json:"line_number"`
+		Path       struct{ Text string } `json:"path"`
+		Lines      struct{ Text string } `json:"lines"`
+		LineNumber int                  `json:"line_number"`
 	}
 	if err := b.doRequest(ctx, "GET", "/find?"+params.Encode(), nil, &matches); err != nil {
 		return nil, err
@@ -84,7 +84,7 @@ func (b *OpencodeBackend) SearchText(ctx context.Context, pattern string) ([]bac
 	results := make([]backend.SearchResult, len(matches))
 	for i, m := range matches {
 		results[i] = backend.SearchResult{
-			Path: m.Path, LineNumber: m.LineNumber, Content: m.Lines,
+			Path: m.Path.Text, LineNumber: m.LineNumber, Content: m.Lines.Text,
 		}
 	}
 	return results, nil
