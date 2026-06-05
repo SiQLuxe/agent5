@@ -48,27 +48,31 @@ type ResponseChoice struct {
 	FinishReason string          `json:"finish_reason"`
 }
 
+type Usage struct {
+	PromptTokens     int `json:"prompt_tokens"`
+	CompletionTokens int `json:"completion_tokens"`
+	TotalTokens      int `json:"total_tokens"`
+}
+
+type DeltaMessage struct {
+	Role      string     `json:"role"`
+	Content   string     `json:"content"`
+	ToolCalls []ToolCall `json:"tool_calls,omitempty"`
+}
+
+type StreamingChoice struct {
+	Index        int          `json:"index"`
+	Delta        DeltaMessage `json:"delta"`
+	FinishReason string       `json:"finish_reason"`
+}
+
 type ChatCompletionResponse struct {
 	ID      string           `json:"id"`
 	Object  string           `json:"object"`
 	Created int64            `json:"created"`
 	Model   string           `json:"model"`
 	Choices []ResponseChoice `json:"choices"`
-	Usage   struct {
-		PromptTokens     int `json:"prompt_tokens"`
-		CompletionTokens int `json:"completion_tokens"`
-		TotalTokens      int `json:"total_tokens"`
-	} `json:"usage"`
-}
-
-type StreamingChoice struct {
-	Index        int `json:"index"`
-	Delta        struct {
-		Role      string     `json:"role"`
-		Content   string     `json:"content"`
-		ToolCalls []ToolCall `json:"tool_calls,omitempty"`
-	} `json:"delta"`
-	FinishReason string `json:"finish_reason"`
+	Usage   Usage            `json:"usage"`
 }
 
 type StreamingResponse struct {
