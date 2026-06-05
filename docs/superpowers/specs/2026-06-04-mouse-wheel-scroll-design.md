@@ -1,67 +1,92 @@
-# Mouse Wheel Scrolls ChatPanel
+# Mouse Wheel Scrolls Only ChatPanel
 
 ## Problem
 
-Mouse wheel scrolling triggers input history navigation (up/down through past
-messages) instead of scrolling the chat output area. This happens because tcell
-translates mouse wheel events into `KeyUp`/`KeyDown` sequences, and
-`handleInput` intercepts them as history navigation.
+Mouse wheel scrolling currently captures ALL scroll events at the Application
+level (`SetMouseCapture`) and unconditionally routes them to ChatPanel,
+regardless of where the mouse cursor is on screen. This means scrolling in the
+input area (composer), tab bar, or status bar still scrolls the chat panel.
 
 ## Goal
 
-- Mouse wheel scrolls the ChatPanel content area
+- Mouse wheel scrolls ChatPanel **only when the mouse cursor is over the chat
+  area**
+- Mouse wheel over other areas (composer, tab bar, status bar) does nothing
+  (follows tview's default behavior)
 - Only keyboard ↑/↓ arrows navigate input history
 - No other mouse or keyboard behavior changes
 
 ## Solution
 
-Enable terminal mouse tracking and intercept `MouseWheelUp`/`MouseWheelDown`
-events at the application level, routing them to ChatPanel scrolling methods.
+Use **per-primitive** `SetMouseCapture` on ChatPanel instead of intercepting
+events at the Application level. tview's built-in event routing automatically
+dispatches mouse events to the correct primitive based on cursor position
+(checked via `InRect` in each primitive's `WrapMouseHandler`).
 
 ### Changes
 
 **File:** `internal/ui/app.go`, in `NewApp()`
 
-1. **`EnableMouse(true)`** — tells the terminal to send mouse scroll events as
-   proper `MouseWheelUp`/`MouseWheelDown` events instead of translating them
-   to key sequences. Existing click events (tab switching, focus changes) are
-   unaffected.
+1. **Remove** `MouseScrollUp`/`MouseScrollDown` handling from Application-level
+   `SetMouseCapture` — the capture function becomes a no-op pass-through.
 
-2. **`SetMouseCapture`** — intercepts mouse wheel events after `EnableMouse`:
+2. **Add** `a.chatPanel.SetMouseCapture(...)` to handle scroll events only when
+   they reach the ChatPanel (which only happens when the mouse is over its area):
+
    ```go
-   a.SetMouseCapture(func(action tview.MouseAction, event *tcell.EventMouse) (tview.MouseAction, *tcell.EventMouse) {
+   a.chatPanel.SetMouseCapture(func(action tview.MouseAction, event *tcell.EventMouse) (tview.MouseAction, *tcell.EventMouse) {
        switch action {
-       case tview.MouseWheelUp:
+       case tview.MouseScrollUp:
            a.chatPanel.SetAutoScroll(false)
            a.chatPanel.ScrollUp(3)
-           return 0, nil
-       case tview.MouseWheelDown:
+           return tview.MouseConsumed, nil
+       case tview.MouseScrollDown:
            a.chatPanel.ScrollDown(3)
-           return 0, nil
+           return tview.MouseConsumed, nil
        }
        return action, event
    })
    ```
 
+### How Event Routing Works
+
+```
+Mouse scroll event
+  → tcell receives MouseWheelUp/Down
+  → Application.fireMouseActions()
+    → App-level SetMouseCapture (no-op for scroll, unchanged for other events)
+    → Route to root → pages → chatFlex
+      → chatFlex.Flex.MouseHandler() iterates children in Z-order:
+        → tabDock: InRect? No (or doesn't handle scroll) → skip
+        → composer: InRect? No → skip
+        → suggestionMenu: hidden → skip
+        → chatPanel: InRect? Yes → calls chatPanel.SetMouseCapture
+          → returns MouseConsumed → scroll handled
+        → statusBar: skip
+```
+
+No coordinate arithmetic needed — tview's `WrapMouseHandler` / `Flex` routing
+handles the hit-testing natively.
+
 ### Behavior
 
-| Input | Effect |
-|-------|--------|
-| Mouse wheel up | ChatPanel scrolls up 3 lines, auto-scroll disabled |
-| Mouse wheel down | ChatPanel scrolls down 3 lines, auto-scroll unchanged |
-| Keyboard ↑/↓ | History navigation (unchanged) |
-| Other mouse events (click, drag) | Pass through normally |
+| Input | Cursor position | Effect |
+|-------|----------------|--------|
+| Mouse wheel up | Over chat area | ChatPanel scrolls up 3 lines, auto-scroll disabled |
+| Mouse wheel up | Over composer/tabBar/statusBar | No-op |
+| Mouse wheel down | Over chat area | ChatPanel scrolls down 3 lines |
+| Mouse wheel down | Over composer/tabBar/statusBar | No-op |
+| Keyboard ↑/↓ | Anywhere | History navigation (unchanged) |
+| Other mouse events | Anywhere | Pass through normally |
 
 ### Edge Cases
 
-- **No session / empty chat:** `ScrollUp`/`ScrollDown` are no-ops when the
-  panel has no content (tview handles this internally).
-- **Terminal without mouse tracking:** Falls back to current behavior (scroll
-  wheel triggers history nav). Affects only very old terminals; all modern
-  terminals support mouse tracking including macOS Terminal.app, iTerm2,
-  Kitty, Alacritty, xterm.
-- **Tab bar clicks:** Unchanged — `tabbar.SetMouseCapture` continues to
-  receive `MouseLeftClick` events as before.
-- **Text selection in TextArea:** `EnableMouse` may affect text selection in
-  some terminals; this is acceptable as the primary interaction model is
-  keyboard-driven editing.
+- **No session / empty chat:** `ScrollUp`/`ScrollDown` are no-ops (tview
+  handles internally).
+- **Terminal without mouse tracking:** Falls back to default behavior.
+- **Tab bar clicks:** Unchanged — `tabbar.SetMouseCapture` handles
+  `MouseLeftClick`.
+- **Text selection in TextArea:** Unchanged.
+- **Search/help/rename overlay active:** Overlay page handles its own mouse
+  routing; scroll events don't reach the underlying chatFlex.
+- **Window resize:** `GetRect`/`InRect` adapt automatically.

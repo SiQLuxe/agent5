@@ -56,6 +56,7 @@ type App struct {
 	suggestionMenu *suggestion.SuggestionMenu
 	renameInput     *tview.InputField
 	renamePage      *tview.Flex
+	approvalModal   *ApprovalModal
 	orch            *orchestrator.Orchestrator
 }
 
@@ -160,6 +161,10 @@ func NewApp() *App {
 	a.renamePage = renamePage
 	a.pages.AddPage("rename", renamePage, true, false)
 
+	// Approval overlay page
+	a.approvalModal = NewApprovalModal()
+	a.pages.AddPage("approval", a.approvalModal, true, false)
+
 	// Register builtin commands
 	a.registerBuiltinCommands()
 
@@ -167,16 +172,19 @@ func NewApp() *App {
 	a.SetInputCapture(a.handleInput)
 	a.EnableMouse(true)
 	a.SetMouseCapture(func(event *tcell.EventMouse, action tview.MouseAction) (*tcell.EventMouse, tview.MouseAction) {
+		return event, action
+	})
+	a.chatPanel.SetMouseCapture(func(action tview.MouseAction, event *tcell.EventMouse) (tview.MouseAction, *tcell.EventMouse) {
 		switch action {
 		case tview.MouseScrollUp:
 			a.chatPanel.SetAutoScroll(false)
 			a.chatPanel.ScrollUp(3)
-			return nil, 0
+			return tview.MouseConsumed, nil
 		case tview.MouseScrollDown:
 			a.chatPanel.ScrollDown(3)
-			return nil, 0
+			return tview.MouseConsumed, nil
 		}
-		return event, action
+		return action, event
 	})
 	a.SetFocus(a.composer)
 
@@ -831,6 +839,19 @@ func (a *App) SetSkillRegistry(r *service.SkillRegistry) {
 
 func (a *App) SetSkillsDir(dir string) {
 	a.skillsDir = dir
+}
+
+func (a *App) ShowApproval() {
+	a.pages.ShowPage("approval")
+	a.SetFocus(a.approvalModal)
+}
+
+func (a *App) HideApproval() {
+	a.pages.HidePage("approval")
+}
+
+func (a *App) ApprovalModal() *ApprovalModal {
+	return a.approvalModal
 }
 
 func (a *App) enterCommandPalette(mode PaletteMode) {

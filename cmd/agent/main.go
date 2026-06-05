@@ -11,6 +11,7 @@ import (
 	"github.com/example/agent-tui/internal/ai"
 	"github.com/example/agent-tui/internal/agent/orchestrator"
 	"github.com/example/agent-tui/internal/agent/runtime"
+	"github.com/example/agent-tui/internal/agent/save"
 	"github.com/example/agent-tui/internal/agent/tool"
 	"github.com/example/agent-tui/internal/backend"
 	_ "github.com/example/agent-tui/internal/backend/opencode"
@@ -129,6 +130,37 @@ func main() {
 		toolReg.Register(&tool.ChatLLMTool{Provider: &aiLLMProvider{client: aiClient}})
 	}
 
+	skillRegistry := service.NewSkillRegistry()
+	if err := service.LoadSkillsDir(skillRegistry, "skills"); err != nil {
+		log.Printf("warning: loading skills: %v", err)
+	}
+	skillExecutor := service.NewSkillExecutor(skillRegistry, aiAssistant)
+
+	app := ui.NewApp()
+	app.SetAIAssistant(aiAssistant)
+	app.SetSkillExecutor(skillExecutor)
+	app.SetSkillRegistry(skillRegistry)
+	app.SetSkillsDir("skills")
+
+	approvalFn := func(toolName string, params map[string]interface{}, oldContent, newContent string) bool {
+		path, _ := params["path"].(string)
+		diffContent := save.UnifiedDiff(path, oldContent, newContent)
+
+		modal := app.ApprovalModal()
+		app.QueueUpdateDraw(func() {
+			modal.SetContent(path, diffContent)
+			app.ShowApproval()
+		})
+
+		result := modal.Wait()
+
+		app.QueueUpdateDraw(func() {
+			app.HideApproval()
+		})
+
+		return result
+	}
+
 	agentLLM := &aiLLMAdapter{client: aiClient, model: cfg.DefaultClient}
 	agentReg := orchestrator.NewRegistry()
 	for _, ac := range cfg.AgentRoles {
@@ -147,6 +179,7 @@ func main() {
 			SystemPrompt: ac.SystemPrompt,
 			MaxReActLoop: ac.MaxReActLoop,
 			SandboxDir:   ac.SandboxDir,
+			ApprovalFn:   approvalFn,
 		}, agentTools, agentLLM)
 		agentReg.Register(ac.Name, agent,
 			string(orchestrator.TaskExecute),
@@ -157,18 +190,6 @@ func main() {
 		)
 	}
 	orch := orchestrator.NewOrchestrator(agentReg, orchestrator.NewDecomposer(), orchestrator.NewMerger())
-
-	skillRegistry := service.NewSkillRegistry()
-	if err := service.LoadSkillsDir(skillRegistry, "skills"); err != nil {
-		log.Printf("warning: loading skills: %v", err)
-	}
-	skillExecutor := service.NewSkillExecutor(skillRegistry, aiAssistant)
-
-	app := ui.NewApp()
-	app.SetAIAssistant(aiAssistant)
-	app.SetSkillExecutor(skillExecutor)
-	app.SetSkillRegistry(skillRegistry)
-	app.SetSkillsDir("skills")
 	app.SetOrchestrator(orch)
 
 	// Sync skills into command registry
