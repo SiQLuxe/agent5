@@ -97,6 +97,81 @@ func TestWriteFileToolRejected(t *testing.T) {
 	}
 }
 
+func TestWriteFileSandboxWithin(t *testing.T) {
+	sandbox := t.TempDir()
+	ctx := ToolContext{
+		SandboxDir: sandbox,
+	}
+	tool := &WriteFileTool{}
+	path := filepath.Join(sandbox, "hello.py")
+	result := tool.Execute(ctx, map[string]interface{}{
+		"path":    path,
+		"content": `print("hello")`,
+	})
+	if result.Error != "" {
+		t.Fatalf("expected no error, got: %s", result.Error)
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(data) != `print("hello")` {
+		t.Fatalf("expected 'print(\"hello\")', got %q", string(data))
+	}
+}
+
+func TestWriteFileSandboxRejectsOutside(t *testing.T) {
+	sandbox := t.TempDir()
+	ctx := ToolContext{
+		SandboxDir: sandbox,
+	}
+	tool := &WriteFileTool{}
+	outsidePath := filepath.Join(t.TempDir(), "evil.py")
+	result := tool.Execute(ctx, map[string]interface{}{
+		"path":    outsidePath,
+		"content": `print("evil")`,
+	})
+	if result.Error == "" {
+		t.Fatal("expected error for path outside sandbox, got none")
+	}
+}
+
+func TestWriteFileSandboxEscape(t *testing.T) {
+	sandbox := t.TempDir()
+	ctx := ToolContext{
+		SandboxDir: sandbox,
+	}
+	tool := &WriteFileTool{}
+	parent := filepath.Dir(sandbox)
+	sibling := filepath.Join(parent, filepath.Base(sandbox)+"-escape", "evil.py")
+	result := tool.Execute(ctx, map[string]interface{}{
+		"path":    sibling,
+		"content": `print("evil")`,
+	})
+	if result.Error == "" {
+		t.Fatal("expected error for sandbox escape attempt, got none")
+	}
+}
+
+func TestWriteFileSandboxRelativePath(t *testing.T) {
+	sandbox := t.TempDir()
+	ctx := ToolContext{
+		SandboxDir: sandbox,
+	}
+	tool := &WriteFileTool{}
+	result := tool.Execute(ctx, map[string]interface{}{
+		"path":    "hello.py",
+		"content": `print("hello")`,
+	})
+	if result.Error != "" {
+		t.Fatalf("expected no error, got: %s", result.Error)
+	}
+	expectedPath := filepath.Join(sandbox, "hello.py")
+	if _, err := os.Stat(expectedPath); os.IsNotExist(err) {
+		t.Fatalf("expected file %s to exist", expectedPath)
+	}
+}
+
 func TestWriteFileToolApproved(t *testing.T) {
 	dir := t.TempDir()
 	file := filepath.Join(dir, "approved.txt")
