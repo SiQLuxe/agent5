@@ -5,13 +5,18 @@ import (
 	"strings"
 )
 
-type SkillExecutor struct {
-	registry    *SkillRegistry
-	aiAssistant *AIAssistant
+// LLMChatter provides a simple chat completion (no tools needed for skills)
+type LLMChatter interface {
+	Chat(sessionID, message string) (string, error)
 }
 
-func NewSkillExecutor(registry *SkillRegistry, ai *AIAssistant) *SkillExecutor {
-	return &SkillExecutor{registry: registry, aiAssistant: ai}
+type SkillExecutor struct {
+	registry *SkillRegistry
+	chater   LLMChatter
+}
+
+func NewSkillExecutor(registry *SkillRegistry, chater LLMChatter) *SkillExecutor {
+	return &SkillExecutor{registry: registry, chater: chater}
 }
 
 func (e *SkillExecutor) Execute(cmd *ParsedCommand) (string, error) {
@@ -33,8 +38,8 @@ func (e *SkillExecutor) Execute(cmd *ParsedCommand) (string, error) {
 		if cmd.Args != "" && strings.Contains(prompt, "%s") {
 			prompt = strings.ReplaceAll(prompt, "%s", cmd.Args)
 		}
-		if e.aiAssistant != nil {
-			return e.aiAssistant.Chat("skill-"+skill.Name, prompt)
+		if e.chater != nil {
+			return e.chater.Chat("skill-"+skill.Name, prompt)
 		}
 		return prompt, nil
 	}
