@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 
 	"github.com/BurntSushi/toml"
@@ -69,6 +70,7 @@ func LoadConfig(path string) (*Config, error) {
 		return nil, err
 	}
 	applyEnvOverrides(&cfg)
+	applyDefaultSandbox(&cfg)
 	return &cfg, nil
 }
 
@@ -111,6 +113,18 @@ func GetDefaultConfig() *Config {
 				},
 			},
 		},
+	}
+}
+
+func applyDefaultSandbox(cfg *Config) {
+	for i := range cfg.AgentRoles {
+		if cfg.AgentRoles[i].SandboxDir == "" {
+			if runtime.GOOS == "windows" {
+				cfg.AgentRoles[i].SandboxDir = filepath.Join(os.Getenv("TEMP"), "agent-tui", "sandbox")
+			} else {
+				cfg.AgentRoles[i].SandboxDir = "/tmp/agent-tui/sandbox"
+			}
+		}
 	}
 }
 

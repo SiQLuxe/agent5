@@ -1,6 +1,12 @@
 package config
 
-import "testing"
+import (
+	"os"
+	"path/filepath"
+	"runtime"
+	"strings"
+	"testing"
+)
 
 func TestGetDefaultConfig(t *testing.T) {
 	cfg := GetDefaultConfig()
@@ -40,5 +46,75 @@ func TestConfigStructure(t *testing.T) {
 	}
 	if cfg.Models.OpenAI.DefaultModel != "gpt-4" {
 		t.Errorf("unexpected openai default model: %s", cfg.Models.OpenAI.DefaultModel)
+	}
+}
+
+func TestDefaultSandboxDir(t *testing.T) {
+	cfg := GetDefaultConfig()
+	for _, role := range cfg.AgentRoles {
+		if role.SandboxDir != "" {
+			t.Fatalf("expected empty sandbox_dir, got %q", role.SandboxDir)
+		}
+	}
+}
+
+func TestSandboxDirDefaultApplied(t *testing.T) {
+	content := []byte(`
+[[agent_role]]
+name = "coder"
+enabled = true
+model = "test"
+system_prompt = "test"
+tools = ["read_file", "write_file"]
+max_react_loop = 5
+sandbox_dir = ""
+`)
+	path := filepath.Join(t.TempDir(), "config.toml")
+	if err := os.WriteFile(path, content, 0644); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := LoadConfig(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(cfg.AgentRoles) != 1 {
+		t.Fatalf("expected 1 role, got %d", len(cfg.AgentRoles))
+	}
+	role := cfg.AgentRoles[0]
+	if role.SandboxDir == "" {
+		t.Fatal("expected SandboxDir to be set to default, got empty")
+	}
+	if runtime.GOOS == "windows" {
+		if !strings.Contains(role.SandboxDir, os.Getenv("TEMP")) {
+			t.Fatalf("expected %q to contain TEMP dir", role.SandboxDir)
+		}
+	} else {
+		if !strings.HasPrefix(role.SandboxDir, "/tmp/") {
+			t.Fatalf("expected %q to start with /tmp/", role.SandboxDir)
+		}
+	}
+}
+
+func TestSandboxDirPreservesExplicit(t *testing.T) {
+	content := []byte(`
+[[agent_role]]
+name = "coder"
+enabled = true
+model = "test"
+system_prompt = "test"
+tools = ["read_file", "write_file"]
+max_react_loop = 5
+sandbox_dir = "/custom/path"
+`)
+	path := filepath.Join(t.TempDir(), "config.toml")
+	if err := os.WriteFile(path, content, 0644); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := LoadConfig(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.AgentRoles[0].SandboxDir != "/custom/path" {
+		t.Fatalf("expected /custom/path, got %q", cfg.AgentRoles[0].SandboxDir)
 	}
 }
