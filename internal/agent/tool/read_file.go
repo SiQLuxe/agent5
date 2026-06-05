@@ -29,12 +29,14 @@ func (t *ReadFileTool) Execute(ctx ToolContext, params map[string]interface{}) T
 	}
 
 	if ctx.SandboxDir != "" {
-		if filepath.IsAbs(path) {
-			if !strings.HasPrefix(filepath.Clean(path), filepath.Clean(ctx.SandboxDir)) {
-				return ToolResult{Error: fmt.Sprintf("path %q is outside sandbox %q", path, ctx.SandboxDir)}
-			}
-		} else {
-			path = filepath.Join(ctx.SandboxDir, path)
+		sandbox := filepath.Clean(ctx.SandboxDir)
+		if !filepath.IsAbs(path) {
+			path = filepath.Join(sandbox, path)
+		}
+		target := filepath.Clean(path)
+		rel, err := filepath.Rel(sandbox, target)
+		if err != nil || strings.HasPrefix(rel, "..") {
+			return ToolResult{Error: fmt.Sprintf("path %q is outside sandbox %q", path, ctx.SandboxDir)}
 		}
 	}
 

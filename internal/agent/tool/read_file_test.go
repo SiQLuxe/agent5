@@ -62,3 +62,64 @@ func TestReadFileToolMissingParam(t *testing.T) {
 		t.Fatal("expected failure for missing param")
 	}
 }
+
+func TestReadFileSandboxWithin(t *testing.T) {
+	sandbox := t.TempDir()
+	testFile := filepath.Join(sandbox, "test.txt")
+	if err := os.WriteFile(testFile, []byte("hello"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	ctx := ToolContext{SandboxDir: sandbox}
+	tool := &ReadFileTool{}
+	result := tool.Execute(ctx, map[string]interface{}{"path": testFile})
+	if result.Error != "" {
+		t.Fatalf("expected no error, got: %s", result.Error)
+	}
+}
+
+func TestReadFileSandboxRejectsOutside(t *testing.T) {
+	sandbox := t.TempDir()
+	outsideDir := t.TempDir()
+	testFile := filepath.Join(outsideDir, "test.txt")
+	if err := os.WriteFile(testFile, []byte("hello"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	ctx := ToolContext{SandboxDir: sandbox}
+	tool := &ReadFileTool{}
+	result := tool.Execute(ctx, map[string]interface{}{"path": testFile})
+	if result.Error == "" {
+		t.Fatal("expected error for path outside sandbox, got none")
+	}
+}
+
+func TestReadFileSandboxEscape(t *testing.T) {
+	sandbox := t.TempDir()
+	parent := filepath.Dir(sandbox)
+	escapePath := filepath.Join(parent, filepath.Base(sandbox)+"-escape", "test.txt")
+	if err := os.MkdirAll(filepath.Dir(escapePath), 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(escapePath, []byte("hello"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	ctx := ToolContext{SandboxDir: sandbox}
+	tool := &ReadFileTool{}
+	result := tool.Execute(ctx, map[string]interface{}{"path": escapePath})
+	if result.Error == "" {
+		t.Fatal("expected error for sandbox escape attempt, got none")
+	}
+}
+
+func TestReadFileSandboxRelativePath(t *testing.T) {
+	sandbox := t.TempDir()
+	testFile := filepath.Join(sandbox, "test.txt")
+	if err := os.WriteFile(testFile, []byte("hello"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	ctx := ToolContext{SandboxDir: sandbox}
+	tool := &ReadFileTool{}
+	result := tool.Execute(ctx, map[string]interface{}{"path": "test.txt"})
+	if result.Error != "" {
+		t.Fatalf("expected no error, got: %s", result.Error)
+	}
+}
