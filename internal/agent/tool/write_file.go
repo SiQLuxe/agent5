@@ -40,6 +40,16 @@ func (t *WriteFileTool) Execute(ctx ToolContext, params map[string]interface{}) 
 		}
 	}
 
+	if ctx.Approval != nil {
+		var oldContent string
+		if data, err := os.ReadFile(path); err == nil {
+			oldContent = string(data)
+		}
+		if !ctx.Approval(t.Name(), params, oldContent, content) {
+			return ToolResult{Error: "file write rejected by user"}
+		}
+	}
+
 	dir := filepath.Dir(path)
 	if dir != "." {
 		os.MkdirAll(dir, 0755)

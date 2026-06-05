@@ -18,7 +18,7 @@ type ParamSchema struct {
 type ToolContext struct {
 	Context    context.Context
 	SandboxDir string
-	Approval   func(toolName string, params map[string]interface{}) bool
+	Approval   func(toolName string, params map[string]interface{}, oldContent, newContent string) bool
 }
 
 type ToolResult struct {
