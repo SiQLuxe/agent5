@@ -18,7 +18,7 @@ func NewOrchestrator(reg *Registry, d *Decomposer, m *Merger) *Orchestrator {
 	}
 }
 
-func (o *Orchestrator) Dispatch(task *Task) ([]*Task, error) {
+func (o *Orchestrator) Dispatch(sessionID string, task *Task) ([]*Task, error) {
 	steps, err := o.decomposer.Decompose(task)
 	if err != nil {
 		return nil, fmt.Errorf("decompose: %w", err)
@@ -38,7 +38,7 @@ func (o *Orchestrator) Dispatch(task *Task) ([]*Task, error) {
 		step.Status = StatusRunning
 		step.AgentID = agent.Name
 
-		result, err := agent.Execute(step.Content)
+		result, err := agent.Execute(sessionID, step.Content)
 		if err != nil {
 			step.Status = StatusFailed
 			step.Error = err.Error()
@@ -54,15 +54,15 @@ func (o *Orchestrator) Dispatch(task *Task) ([]*Task, error) {
 	return results, nil
 }
 
-func (o *Orchestrator) DispatchAndMerge(task *Task) (string, error) {
-	results, err := o.Dispatch(task)
+func (o *Orchestrator) DispatchAndMerge(sessionID string, task *Task) (string, error) {
+	results, err := o.Dispatch(sessionID, task)
 	if err != nil {
 		return "", err
 	}
 	return o.merger.Merge(results), nil
 }
 
-func (o *Orchestrator) DispatchStream(task *Task, onChunk func(string)) ([]*Task, error) {
+func (o *Orchestrator) DispatchStream(sessionID string, task *Task, onChunk func(string)) ([]*Task, error) {
 	steps, err := o.decomposer.Decompose(task)
 	if err != nil {
 		return nil, fmt.Errorf("decompose: %w", err)
@@ -82,7 +82,7 @@ func (o *Orchestrator) DispatchStream(task *Task, onChunk func(string)) ([]*Task
 		step.Status = StatusRunning
 		step.AgentID = agent.Name
 
-		result, err := agent.ExecuteStream(step.Content, onChunk)
+		result, err := agent.ExecuteStream(sessionID, step.Content, onChunk)
 		if err != nil {
 			step.Status = StatusFailed
 			step.Error = err.Error()
