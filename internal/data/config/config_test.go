@@ -3,7 +3,6 @@ package config
 import (
 	"os"
 	"path/filepath"
-	"runtime"
 	"strings"
 	"testing"
 )
@@ -84,14 +83,8 @@ sandbox_dir = ""
 	if role.SandboxDir == "" {
 		t.Fatal("expected SandboxDir to be set to default, got empty")
 	}
-	if runtime.GOOS == "windows" {
-		if !strings.Contains(role.SandboxDir, os.Getenv("TEMP")) {
-			t.Fatalf("expected %q to contain TEMP dir", role.SandboxDir)
-		}
-	} else {
-		if !strings.HasPrefix(role.SandboxDir, "/tmp/") {
-			t.Fatalf("expected %q to start with /tmp/", role.SandboxDir)
-		}
+	if !strings.HasPrefix(role.SandboxDir, os.TempDir()) {
+		t.Fatalf("expected %q to start with %q", role.SandboxDir, os.TempDir())
 	}
 }
 
