@@ -12,6 +12,7 @@ type Config struct {
 	Temperature  float64
 	ContextLimit int
 	SandboxDir   string
+	ApprovalFn   func(toolName string, params map[string]interface{}, oldContent, newContent string) bool
 }
 
 type Agent struct {

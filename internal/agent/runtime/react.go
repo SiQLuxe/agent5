@@ -38,6 +38,7 @@ func (a *Agent) reactLoop(task string) (string, error) {
 			tc := tool.ToolContext{
 				Context:    nil,
 				SandboxDir: a.Config.SandboxDir,
+				Approval:   a.Config.ApprovalFn,
 			}
 			result := t.Execute(tc, resp.ToolCall.Arguments)
 			a.Logger.Log("tool_result", fmt.Sprintf("%+v", result.Data), resp.ToolCall.Name, resp.ToolCall.Arguments, &result, time.Since(toolStart))
@@ -89,6 +90,7 @@ func (a *Agent) reactLoopStream(task string, onChunk func(string)) (string, erro
 			tc := tool.ToolContext{
 				Context:    nil,
 				SandboxDir: a.Config.SandboxDir,
+				Approval:   a.Config.ApprovalFn,
 			}
 			result := t.Execute(tc, resp.ToolCall.Arguments)
 			a.Logger.Log("tool_result", fmt.Sprintf("%+v", result.Data), resp.ToolCall.Name, resp.ToolCall.Arguments, &result, time.Since(toolStart))
