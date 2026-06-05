@@ -7,11 +7,20 @@ import (
 	"github.com/example/agent-tui/internal/agent/tool"
 )
 
-func (a *Agent) reactLoop(task string) (string, error) {
-	messages := []Message{
+func (a *Agent) buildMessages(sessionID, task string) []Message {
+	msgs := []Message{
 		{Role: "system", Content: a.Config.SystemPrompt},
-		{Role: "user", Content: task},
 	}
+	ctx := a.Session.GetContext(sessionID, a.Config.ContextLimit)
+	for _, m := range ctx {
+		msgs = append(msgs, Message{Role: m.Role, Content: m.Content})
+	}
+	msgs = append(msgs, Message{Role: "user", Content: task})
+	return msgs
+}
+
+func (a *Agent) reactLoop(sessionID, task string) (string, error) {
+	messages := a.buildMessages(sessionID, task)
 
 	for i := 0; i < a.Config.MaxReActLoop; i++ {
 		start := time.Now()
@@ -51,7 +60,8 @@ func (a *Agent) reactLoop(task string) (string, error) {
 			}
 
 		case "final":
-			a.Memory.Append("assistant", resp.Content)
+			a.Session.AddMessage(sessionID, "user", task)
+			a.Session.AddMessage(sessionID, "assistant", resp.Content)
 			return resp.Content, nil
 		}
 	}
@@ -59,11 +69,8 @@ func (a *Agent) reactLoop(task string) (string, error) {
 	return "", fmt.Errorf("max react loop iterations (%d) reached", a.Config.MaxReActLoop)
 }
 
-func (a *Agent) reactLoopStream(task string, onChunk func(string)) (string, error) {
-	messages := []Message{
-		{Role: "system", Content: a.Config.SystemPrompt},
-		{Role: "user", Content: task},
-	}
+func (a *Agent) reactLoopStream(sessionID, task string, onChunk func(string)) (string, error) {
+	messages := a.buildMessages(sessionID, task)
 
 	for i := 0; i < a.Config.MaxReActLoop; i++ {
 		start := time.Now()
@@ -103,7 +110,8 @@ func (a *Agent) reactLoopStream(task string, onChunk func(string)) (string, erro
 			}
 
 		case "final":
-			a.Memory.Append("assistant", resp.Content)
+			a.Session.AddMessage(sessionID, "user", task)
+			a.Session.AddMessage(sessionID, "assistant", resp.Content)
 			return resp.Content, nil
 		}
 	}

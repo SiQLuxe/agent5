@@ -1,6 +1,7 @@
 package runtime
 
 import (
+	"github.com/example/agent-tui/internal/agent/session"
 	"github.com/example/agent-tui/internal/agent/tool"
 )
 
@@ -16,15 +17,15 @@ type Config struct {
 }
 
 type Agent struct {
-	Name   string
-	Config Config
-	Tools  *tool.Registry
-	Memory *Memory
-	Logger *Logger
-	llm    LLMClient
+	Name    string
+	Config  Config
+	Tools   *tool.Registry
+	Session *session.Manager
+	Logger  *Logger
+	llm     LLMClient
 }
 
-func NewAgent(cfg Config, tools *tool.Registry, llm LLMClient) *Agent {
+func NewAgent(cfg Config, tools *tool.Registry, llm LLMClient, sm *session.Manager) *Agent {
 	if cfg.MaxReActLoop == 0 {
 		cfg.MaxReActLoop = 20
 	}
@@ -35,23 +36,21 @@ func NewAgent(cfg Config, tools *tool.Registry, llm LLMClient) *Agent {
 		cfg.ContextLimit = 50
 	}
 	return &Agent{
-		Name:   cfg.Name,
-		Config: cfg,
-		Tools:  tools,
-		Memory: NewMemory(),
-		Logger: NewLogger(100),
-		llm:    llm,
+		Name:    cfg.Name,
+		Config:  cfg,
+		Tools:   tools,
+		Session: sm,
+		Logger:  NewLogger(100),
+		llm:     llm,
 	}
 }
 
-func (a *Agent) Execute(task string) (string, error) {
-	a.Memory.Clear()
+func (a *Agent) Execute(sessionID, task string) (string, error) {
 	a.Logger.Clear()
-	return a.reactLoop(task)
+	return a.reactLoop(sessionID, task)
 }
 
-func (a *Agent) ExecuteStream(task string, onChunk func(string)) (string, error) {
-	a.Memory.Clear()
+func (a *Agent) ExecuteStream(sessionID, task string, onChunk func(string)) (string, error) {
 	a.Logger.Clear()
-	return a.reactLoopStream(task, onChunk)
+	return a.reactLoopStream(sessionID, task, onChunk)
 }
