@@ -24,7 +24,7 @@ type Skill struct {
 type SkillContext struct {
 	Input     string
 	SessionID string
-	AI        *AIAssistant
+	AI        LLMChatter
 }
 
 type SkillRegistry struct {

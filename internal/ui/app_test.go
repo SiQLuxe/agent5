@@ -6,7 +6,7 @@ import (
 
 	"github.com/gdamore/tcell/v2"
 	"github.com/example/agent-tui/internal/ai"
-	"github.com/example/agent-tui/internal/data/history"
+	"github.com/example/agent-tui/internal/agent/session"
 	"github.com/example/agent-tui/internal/service"
 )
 
@@ -140,12 +140,12 @@ func TestCloseSessionLastRemaining(t *testing.T) {
 func TestSendMessage(t *testing.T) {
 	a := NewApp()
 	a.newSession()
-	h := history.NewHistory("")
 	mockClient := &MockAIClientForApp{
 		mockResponse: "Hello!",
 	}
-	aiAssistant := service.NewAIAssistant(mockClient, h)
-	a.SetAIAssistant(aiAssistant)
+	sm := session.NewManager()
+	sm.SetClient(mockClient)
+	a.SetSessionManager(sm)
 
 	a.composer.SetInput("hello")
 	a.sendMessage()
@@ -248,12 +248,12 @@ func TestSetLoading(t *testing.T) {
 func TestSendMessageStartsStreaming(t *testing.T) {
 	a := NewApp()
 	a.newSession()
-	h := history.NewHistory("")
 	mockClient := &MockAIClientForApp{
 		mockResponse: "Hello world",
 	}
-	aiAssistant := service.NewAIAssistant(mockClient, h)
-	a.SetAIAssistant(aiAssistant)
+	sm := session.NewManager()
+	sm.SetClient(mockClient)
+	a.SetSessionManager(sm)
 
 	a.composer.SetInput("hi")
 	a.sendMessage()
@@ -279,12 +279,12 @@ func TestSendMessageStartsStreaming(t *testing.T) {
 
 func TestNewSessionRegistersInHistory(t *testing.T) {
 	a := NewApp()
-	h := history.NewHistory("")
 	mockClient := &MockAIClientForApp{
 		mockResponse: "Hello!",
 	}
-	aiAssistant := service.NewAIAssistant(mockClient, h)
-	a.SetAIAssistant(aiAssistant)
+	sm := session.NewManager()
+	sm.SetClient(mockClient)
+	a.SetSessionManager(sm)
 	a.newSession()
 
 	s := a.activeSessionPtr()
@@ -292,8 +292,8 @@ func TestNewSessionRegistersInHistory(t *testing.T) {
 		t.Fatal("expected active session")
 	}
 
-	// History should have this session registered
-	sessions := h.GetSessions()
+	// SessionManager should have this session registered
+	sessions := sm.ListSessions()
 	found := false
 	for _, si := range sessions {
 		if si.ID == s.ID {
@@ -302,20 +302,20 @@ func TestNewSessionRegistersInHistory(t *testing.T) {
 		}
 	}
 	if !found {
-		t.Fatal("BUG: session not registered in history store - ChatStream AddMessage will silently fail, API receives empty messages")
+		t.Fatal("BUG: session not registered in session manager - ChatStream AddMessage will silently fail, API receives empty messages")
 	}
 
 	// Simulate what ChatStream does - AddMessage should succeed now
-	err := h.AddMessage(s.ID, "user", "hello")
+	err := sm.AddMessage(s.ID, "user", "hello")
 	if err != nil {
 		t.Fatalf("AddMessage failed: %v", err)
 	}
-	msgs := h.GetMessages(s.ID)
-	if len(msgs) != 1 {
-		t.Fatalf("expected 1 message in history, got %d", len(msgs))
+	ctx := sm.GetContext(s.ID, 0)
+	if len(ctx) != 1 {
+		t.Fatalf("expected 1 message in context, got %d", len(ctx))
 	}
-	if msgs[0].Role != "user" || msgs[0].Content != "hello" {
-		t.Fatalf("unexpected message: %+v", msgs[0])
+	if ctx[0].Role != "user" || ctx[0].Content != "hello" {
+		t.Fatalf("unexpected message: %+v", ctx[0])
 	}
 }
 
@@ -538,12 +538,12 @@ func TestShortcutToggleTheme_CtrlK_Consumed(t *testing.T) {
 func TestSendMessageBlockedDuringLoading(t *testing.T) {
 	a := NewApp()
 	a.newSession()
-	h := history.NewHistory("")
 	mockClient := &MockAIClientForApp{
 		mockResponse: "Hello!",
 	}
-	aiAssistant := service.NewAIAssistant(mockClient, h)
-	a.SetAIAssistant(aiAssistant)
+	sm := session.NewManager()
+	sm.SetClient(mockClient)
+	a.SetSessionManager(sm)
 	a.SetLoading(true)
 	a.composer.SetInput("hello")
 

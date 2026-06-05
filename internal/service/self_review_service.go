@@ -15,15 +15,15 @@ type ReviewResult struct {
 
 // SelfReviewService AI 自我审查服务
 type SelfReviewService struct {
-	aiAssistant *AIAssistant
-	template    *TemplateService
+	chater   LLMChatter
+	template *TemplateService
 }
 
 // NewSelfReviewService 创建自我审查服务
-func NewSelfReviewService(ai *AIAssistant) *SelfReviewService {
+func NewSelfReviewService(chater LLMChatter) *SelfReviewService {
 	return &SelfReviewService{
-		aiAssistant: ai,
-		template:    NewTemplateService(),
+		chater:   chater,
+		template: NewTemplateService(),
 	}
 }
 
@@ -165,7 +165,7 @@ func (s *SelfReviewService) aiReview(content string, currentResult *ReviewResult
   "suggestions": ["改进建议"]
 }`, content)
 
-	response, err := s.aiAssistant.Chat("review", prompt)
+	response, err := s.chater.Chat("review", prompt)
 	if err != nil {
 		return nil, err
 	}
@@ -190,7 +190,7 @@ func (s *SelfReviewService) aiReview(content string, currentResult *ReviewResult
 // GenerateWithSelfReview 生成内容并进行自我审查
 func (s *SelfReviewService) GenerateWithSelfReview(sessionID, prompt string) (string, error) {
 	// 1. 生成初始内容
-	initialContent, err := s.aiAssistant.Chat(sessionID, prompt)
+	initialContent, err := s.chater.Chat(sessionID, prompt)
 	if err != nil {
 		return "", err
 	}
@@ -232,5 +232,5 @@ func (s *SelfReviewService) improveContent(content string, review *ReviewResult)
 
 请直接输出改进后的内容。`, content, suggestionsText)
 
-	return s.aiAssistant.Chat("improve", prompt)
+	return s.chater.Chat("improve", prompt)
 }

@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/example/agent-tui/internal/agent/runtime"
+	"github.com/example/agent-tui/internal/agent/session"
 	"github.com/example/agent-tui/internal/agent/tool"
 )
 
@@ -12,13 +13,14 @@ func TestOrchestratorDispatchSingle(t *testing.T) {
 	mockLLM := runtime.NewMockLLMClient([]runtime.LLMResponse{
 		{Type: "final", Content: "done"},
 	})
-	agent := runtime.NewAgent(runtime.Config{Name: "coder"}, tool.NewRegistry(), mockLLM)
+	sm := session.NewManager()
+	agent := runtime.NewAgent(runtime.Config{Name: "coder"}, tool.NewRegistry(), mockLLM, sm)
 	reg.Register("coder", agent, "task_code")
 
 	orch := NewOrchestrator(reg, NewDecomposer(), NewMerger())
 
 	task := &Task{ID: "t1", Type: TaskCode, Content: "write code"}
-	results, err := orch.Dispatch(task)
+	results, err := orch.Dispatch("test-session", task)
 	if err != nil {
 		t.Fatalf("Dispatch failed: %v", err)
 	}
@@ -33,9 +35,10 @@ func TestOrchestratorDispatchSplit(t *testing.T) {
 	mockLLM := runtime.NewMockLLMClient([]runtime.LLMResponse{
 		{Type: "final", Content: "done"},
 	})
-	planner := runtime.NewAgent(runtime.Config{Name: "planner"}, tool.NewRegistry(), mockLLM)
-	coder := runtime.NewAgent(runtime.Config{Name: "coder"}, tool.NewRegistry(), mockLLM)
-	reviewer := runtime.NewAgent(runtime.Config{Name: "reviewer"}, tool.NewRegistry(), mockLLM)
+	sm := session.NewManager()
+	planner := runtime.NewAgent(runtime.Config{Name: "planner"}, tool.NewRegistry(), mockLLM, sm)
+	coder := runtime.NewAgent(runtime.Config{Name: "coder"}, tool.NewRegistry(), mockLLM, sm)
+	reviewer := runtime.NewAgent(runtime.Config{Name: "reviewer"}, tool.NewRegistry(), mockLLM, sm)
 
 	reg.Register("planner", planner, "task_analyze", "task_design")
 	reg.Register("coder", coder, "task_code")
@@ -47,7 +50,7 @@ func TestOrchestratorDispatchSplit(t *testing.T) {
 	orch := NewOrchestrator(reg, d, NewMerger())
 
 	task := &Task{ID: "t1", Type: TaskDesign, Content: "add login feature"}
-	results, err := orch.Dispatch(task)
+	results, err := orch.Dispatch("test-session", task)
 	if err != nil {
 		t.Fatalf("Dispatch failed: %v", err)
 	}
@@ -61,7 +64,7 @@ func TestOrchestratorNoAgent(t *testing.T) {
 	orch := NewOrchestrator(reg, NewDecomposer(), NewMerger())
 
 	task := &Task{ID: "t1", Type: TaskCode, Content: "write code"}
-	_, err := orch.Dispatch(task)
+	_, err := orch.Dispatch("test-session", task)
 	if err == nil {
 		t.Fatal("expected error when no agent for task type")
 	}

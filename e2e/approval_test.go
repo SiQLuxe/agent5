@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/example/agent-tui/internal/agent/runtime"
+	"github.com/example/agent-tui/internal/agent/session"
 	"github.com/example/agent-tui/internal/agent/tool"
 )
 
@@ -45,6 +46,7 @@ func TestEndToEnd_ApprovalFlow(t *testing.T) {
 		return true
 	}
 
+	sm := session.NewManager()
 	agent := runtime.NewAgent(runtime.Config{
 		Name:         "test-coder",
 		Model:        "mock",
@@ -52,9 +54,9 @@ func TestEndToEnd_ApprovalFlow(t *testing.T) {
 		MaxReActLoop: 5,
 		SandboxDir:   sandbox,
 		ApprovalFn:   approvalFn,
-	}, toolReg, mockLLM)
+	}, toolReg, mockLLM, sm)
 
-	_, err := agent.Execute("write a hello world program to hello.py")
+	_, err := agent.Execute("test-session", "write a hello world program to hello.py")
 	if err != nil {
 		t.Fatalf("agent execute failed: %v", err)
 	}

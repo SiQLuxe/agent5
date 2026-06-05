@@ -71,3 +71,51 @@ func (m *Manager) GetModel() string {
 func (m *Manager) ListModels() ([]string, error) {
 	return []string{}, nil
 }
+
+// Chat satisfies service.LLMChatter for SkillExecutor
+func (m *Manager) Chat(sessionID, message string) (string, error) {
+	m.AddMessage(sessionID, "user", message)
+	ctx := m.GetContext(sessionID, 0)
+	aiMessages := make([]ai.Message, len(ctx))
+	for i, msg := range ctx {
+		aiMessages[i] = ai.Message{Role: msg.Role, Content: msg.Content}
+	}
+	req := ai.ChatCompletionRequest{
+		Model:    m.GetModel(),
+		Messages: aiMessages,
+	}
+	resp, err := m.client.ChatCompletion(req)
+	if err != nil {
+		return "", err
+	}
+	if len(resp.Choices) > 0 {
+		content := resp.Choices[0].Message.Content
+		m.AddMessage(sessionID, "assistant", content)
+		return content, nil
+	}
+	return "", nil
+}
+
+// ChatStream provides streaming chat without tools (fallback when no agent/orchestrator)
+func (m *Manager) ChatStream(sessionID, message string, callback func(string)) error {
+	m.AddMessage(sessionID, "user", message)
+	ctx := m.GetContext(sessionID, 0)
+	aiMessages := make([]ai.Message, len(ctx))
+	for i, msg := range ctx {
+		aiMessages[i] = ai.Message{Role: msg.Role, Content: msg.Content}
+	}
+	req := ai.ChatCompletionRequest{
+		Model:    m.GetModel(),
+		Messages: aiMessages,
+		Stream:   true,
+	}
+	var fullResponse string
+	err := m.client.ChatCompletionStream(req, func(content string) {
+		fullResponse += content
+		callback(content)
+	})
+	if err == nil && fullResponse != "" {
+		m.AddMessage(sessionID, "assistant", fullResponse)
+	}
+	return err
+}

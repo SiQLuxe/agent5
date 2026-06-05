@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"log"
 	"os"
 	"os/signal"
@@ -12,11 +13,11 @@ import (
 	"github.com/example/agent-tui/internal/agent/orchestrator"
 	"github.com/example/agent-tui/internal/agent/runtime"
 	"github.com/example/agent-tui/internal/agent/save"
+	"github.com/example/agent-tui/internal/agent/session"
 	"github.com/example/agent-tui/internal/agent/tool"
 	"github.com/example/agent-tui/internal/backend"
 	_ "github.com/example/agent-tui/internal/backend/opencode"
 	"github.com/example/agent-tui/internal/data/config"
-	"github.com/example/agent-tui/internal/data/history"
 	"github.com/example/agent-tui/internal/server"
 	"github.com/example/agent-tui/internal/service"
 	"github.com/example/agent-tui/internal/ui"
@@ -32,13 +33,24 @@ func (a *aiLLMAdapter) ChatWithTools(msgs []runtime.Message, tools []map[string]
 	if model == "" {
 		model = a.model
 	}
+
+	aiMessages := make([]ai.Message, len(msgs))
+	for i, m := range msgs {
+		aiMessages[i] = ai.Message{Role: m.Role, Content: m.Content}
+	}
+
+	aiTools := make([]ai.ToolDefinition, len(tools))
+	for i, t := range tools {
+		data, _ := json.Marshal(t)
+		json.Unmarshal(data, &aiTools[i])
+	}
+
 	req := ai.ChatCompletionRequest{
 		Model:    model,
-		Messages: make([]ai.Message, len(msgs)),
+		Messages: aiMessages,
+		Tools:    aiTools,
 	}
-	for i, m := range msgs {
-		req.Messages[i] = ai.Message{Role: m.Role, Content: m.Content}
-	}
+
 	resp, err := a.client.ChatCompletion(req)
 	if err != nil {
 		return nil, err
@@ -46,23 +58,50 @@ func (a *aiLLMAdapter) ChatWithTools(msgs []runtime.Message, tools []map[string]
 	if len(resp.Choices) == 0 {
 		return &runtime.LLMResponse{Type: "final", Content: ""}, nil
 	}
-	return &runtime.LLMResponse{Type: "final", Content: resp.Choices[0].Message.Content}, nil
+
+	choice := resp.Choices[0]
+	msg := choice.Message
+
+	if len(msg.ToolCalls) > 0 {
+		tc := msg.ToolCalls[0]
+		var args map[string]interface{}
+		json.Unmarshal([]byte(tc.Function.Arguments), &args)
+
+		return &runtime.LLMResponse{
+			Type:    "tool_call",
+			Content: msg.Content,
+			ToolCall: &runtime.ToolCall{
+				Name:      tc.Function.Name,
+				Arguments: args,
+			},
+		}, nil
+	}
+
+	return &runtime.LLMResponse{Type: "final", Content: msg.Content}, nil
 }
 
 func (a *aiLLMAdapter) ChatWithToolsStream(msgs []runtime.Message, tools []map[string]interface{}, model string, onChunk func(string)) (*runtime.LLMResponse, error) {
+	resp, err := a.ChatWithTools(msgs, tools, model)
+	if err != nil {
+		return nil, err
+	}
+	if resp.Type == "tool_call" {
+		return resp, nil
+	}
 	if model == "" {
 		model = a.model
 	}
+	aiMessages := make([]ai.Message, len(msgs))
+	for i, m := range msgs {
+		aiMessages[i] = ai.Message{Role: m.Role, Content: m.Content}
+	}
 	req := ai.ChatCompletionRequest{
 		Model:    model,
-		Messages: make([]ai.Message, len(msgs)),
+		Messages: aiMessages,
 		Stream:   true,
 	}
-	for i, m := range msgs {
-		req.Messages[i] = ai.Message{Role: m.Role, Content: m.Content}
-	}
 	var fullContent string
-	err := a.client.ChatCompletionStream(req, func(chunk string) {
+	err = a.client.ChatCompletionStream(req, func(chunk string) {
 		fullContent += chunk
 		onChunk(chunk)
 	})
@@ -117,8 +156,10 @@ func main() {
 		log.Fatalf("failed to create AI client: %v", err)
 	}
 
-	h := history.NewHistory("")
-	aiAssistant := service.NewAIAssistant(aiClient, h)
+	// Create shared SessionManager (replaces history.History + AIAssistant)
+	sm := session.NewManager()
+	sm.SetClient(aiClient)
+	sm.SwitchModel(cfg.DefaultClient)
 
 	// Initialize agent system
 	toolReg := tool.NewRegistry()
@@ -134,10 +175,10 @@ func main() {
 	if err := service.LoadSkillsDir(skillRegistry, "skills"); err != nil {
 		log.Printf("warning: loading skills: %v", err)
 	}
-	skillExecutor := service.NewSkillExecutor(skillRegistry, aiAssistant)
+	skillExecutor := service.NewSkillExecutor(skillRegistry, sm)
 
 	app := ui.NewApp()
-	app.SetAIAssistant(aiAssistant)
+	app.SetSessionManager(sm)
 	app.SetSkillExecutor(skillExecutor)
 	app.SetSkillRegistry(skillRegistry)
 	app.SetSkillsDir("skills")
@@ -180,7 +221,7 @@ func main() {
 			MaxReActLoop: ac.MaxReActLoop,
 			SandboxDir:   ac.SandboxDir,
 			ApprovalFn:   approvalFn,
-		}, agentTools, agentLLM)
+		}, agentTools, agentLLM, sm)
 		agentReg.Register(ac.Name, agent,
 			string(orchestrator.TaskExecute),
 			string(orchestrator.TaskAnalyze),

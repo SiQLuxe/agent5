@@ -4,12 +4,14 @@ import (
 	"testing"
 
 	"github.com/example/agent-tui/internal/agent/runtime"
+	"github.com/example/agent-tui/internal/agent/session"
 	"github.com/example/agent-tui/internal/agent/tool"
 )
 
 func TestRegistryRegisterAndGet(t *testing.T) {
 	reg := NewRegistry()
-	agent := runtime.NewAgent(runtime.Config{Name: "coder"}, tool.NewRegistry(), nil)
+	sm := session.NewManager()
+	agent := runtime.NewAgent(runtime.Config{Name: "coder"}, tool.NewRegistry(), nil, sm)
 	reg.Register("coder", agent, "code", "review")
 
 	got, ok := reg.Get("coder")
@@ -23,8 +25,9 @@ func TestRegistryRegisterAndGet(t *testing.T) {
 
 func TestRegistryFindByRole(t *testing.T) {
 	reg := NewRegistry()
-	reg.Register("planner", runtime.NewAgent(runtime.Config{Name: "planner"}, tool.NewRegistry(), nil), "analyze", "design")
-	reg.Register("coder", runtime.NewAgent(runtime.Config{Name: "coder"}, tool.NewRegistry(), nil), "code")
+	sm := session.NewManager()
+	reg.Register("planner", runtime.NewAgent(runtime.Config{Name: "planner"}, tool.NewRegistry(), nil, sm), "analyze", "design")
+	reg.Register("coder", runtime.NewAgent(runtime.Config{Name: "coder"}, tool.NewRegistry(), nil, sm), "code")
 
 	agents := reg.FindByRole("code")
 	if len(agents) != 1 {

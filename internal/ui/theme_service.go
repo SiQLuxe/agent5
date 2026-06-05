@@ -3,18 +3,18 @@ package ui
 import (
 	"fmt"
 	"strings"
-	"github.com/example/agent-tui/internal/service"
+	"github.com/example/agent-tui/internal/agent/session"
 )
 
 type ThemeService struct {
-	aiAssistant *service.AIAssistant
+	sessionMgr *session.Manager
 	currentTheme Theme
 	themes []Theme
 }
 
-func NewThemeService(ai *service.AIAssistant) *ThemeService {
+func NewThemeService(sm *session.Manager) *ThemeService {
 	return &ThemeService{
-		aiAssistant: ai,
+		sessionMgr: sm,
 		currentTheme: DefaultThemes[0],
 		themes: DefaultThemes,
 	}
@@ -50,8 +50,8 @@ func (ts *ThemeService) NextTheme() {
 }
 
 func (ts *ThemeService) GenerateTheme(preferences string) (*Theme, error) {
-	if ts.aiAssistant == nil {
-		return nil, fmt.Errorf("AI assistant not available")
+	if ts.sessionMgr == nil {
+		return nil, fmt.Errorf("session manager not available")
 	}
 	
 	prompt := fmt.Sprintf(`Create a terminal UI color theme with these preferences: %s
@@ -77,7 +77,7 @@ Return a JSON with these hex colors:
 }
 Use dark theme as base. Ensure good contrast.`, preferences)
 	
-	_, err := ts.aiAssistant.Chat("theme-generator", prompt)
+	_, err := ts.sessionMgr.Chat("theme-generator", prompt)
 	if err != nil {
 		return nil, err
 	}
@@ -88,8 +88,8 @@ Use dark theme as base. Ensure good contrast.`, preferences)
 }
 
 func (ts *ThemeService) EvaluateTheme(theme Theme) (score int, suggestions []string, err error) {
-	if ts.aiAssistant == nil {
-		return 0, []string{}, fmt.Errorf("AI assistant not available")
+	if ts.sessionMgr == nil {
+		return 0, []string{}, fmt.Errorf("session manager not available")
 	}
 	
 	prompt := fmt.Sprintf(`Evaluate this terminal UI color theme (score 0-100):
@@ -99,7 +99,7 @@ Colors: %#v
 
 Return JSON: {"score": 0-100, "suggestions": ["..."]}`, theme.Name, theme.Description, theme.Colors)
 	
-	_, err = ts.aiAssistant.Chat("theme-evaluator", prompt)
+	_, err = ts.sessionMgr.Chat("theme-evaluator", prompt)
 	if err != nil {
 		return 75, []string{"No AI feedback available"}, nil
 	}

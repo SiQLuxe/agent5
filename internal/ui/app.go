@@ -11,6 +11,8 @@ import (
 	"github.com/rivo/tview"
 
 	"github.com/example/agent-tui/internal/agent/orchestrator"
+	"github.com/example/agent-tui/internal/agent/runtime"
+	"github.com/example/agent-tui/internal/agent/session"
 	"github.com/example/agent-tui/internal/service"
 	"github.com/example/agent-tui/internal/ui/composer"
 	"github.com/example/agent-tui/internal/ui/status"
@@ -45,7 +47,8 @@ type App struct {
 	isLoading    bool
 	keyMap       KeyMap
 	themeService *ThemeService
-	aiAssistant  *service.AIAssistant
+	sessionMgr  *session.Manager
+	primaryAgent *runtime.Agent
 	inputHistory []string
 	historyIndex int
 	commandPalette  *CommandPalette
@@ -499,8 +502,8 @@ func (a *App) exitHelp() {
 
 func (a *App) newSession() {
 	id := uuid.New().String()
-	if a.aiAssistant != nil {
-		id = a.aiAssistant.CreateSession("New Session")
+	if a.sessionMgr != nil {
+		id = a.sessionMgr.CreateSession("New Session")
 	}
 	s := NewSession(id, "New Session")
 	a.sessions = append(a.sessions, s)
@@ -593,8 +596,8 @@ func (a *App) sendMessage() {
 		return
 	}
 
-	// Normal text → dispatch through orchestrator (if configured), fallback to AIAssistant
-	if a.orch == nil && a.aiAssistant == nil {
+	// Normal text → dispatch through orchestrator (if configured), fallback to primary agent or session manager
+	if a.orch == nil && a.primaryAgent == nil && a.sessionMgr == nil {
 		// No agent system or AI client configured — cannot handle this message
 		return
 	}
@@ -615,7 +618,7 @@ func (a *App) sendMessage() {
 			}
 
 			var streamBuf string
-			results, err := a.orch.DispatchStream(task, func(chunk string) {
+			results, err := a.orch.DispatchStream(sessionPtr.ID, task, func(chunk string) {
 				a.QueueUpdateDraw(func() {
 					streamBuf += chunk
 					if len(sessionPtr.Messages) > 0 {
@@ -648,34 +651,64 @@ func (a *App) sendMessage() {
 			return
 		}
 
-		var fullResponse string
-		err := a.aiAssistant.ChatStream(sessionPtr.ID, text, func(chunk string) {
-			fullResponse += chunk
-			a.QueueUpdateDraw(func() {
-				if len(sessionPtr.Messages) > 0 {
-					sessionPtr.Messages[len(sessionPtr.Messages)-1].Content = fullResponse
-					a.chatPanel.UpdateStreaming(fullResponse)
-				}
+		// Direct agent or session manager fallback
+		if a.primaryAgent != nil {
+			var streamBuf string
+			_, err := a.primaryAgent.ExecuteStream(sessionPtr.ID, text, func(chunk string) {
+				streamBuf += chunk
+				a.QueueUpdateDraw(func() {
+					if len(sessionPtr.Messages) > 0 {
+						sessionPtr.Messages[len(sessionPtr.Messages)-1].Content = streamBuf
+						a.chatPanel.UpdateStreaming(streamBuf)
+					}
+				})
 			})
-		})
-
-		a.QueueUpdateDraw(func() {
-			a.isLoading = false
-			if err != nil {
-				sessionPtr.AddMessage(RoleSystem, "Error: "+err.Error())
-			}
-			a.chatPanel.EndStreaming()
-			label := sessionPtr.GenerateLabel()
-			if label != "New Session" {
-				sessionPtr.Label = label
-				for i, s := range a.sessions {
-					if s == sessionPtr {
-						a.tabDock.UpdateTab(i, label)
-						break
+			a.QueueUpdateDraw(func() {
+				a.isLoading = false
+				if err != nil {
+					sessionPtr.AddMessage(RoleSystem, "Error: "+err.Error())
+				}
+				a.chatPanel.EndStreaming()
+				label := sessionPtr.GenerateLabel()
+				if label != "New Session" {
+					sessionPtr.Label = label
+					for i, s := range a.sessions {
+						if s == sessionPtr {
+							a.tabDock.UpdateTab(i, label)
+							break
+						}
 					}
 				}
-			}
-		})
+			})
+		} else if a.sessionMgr != nil {
+			var fullResponse string
+			err := a.sessionMgr.ChatStream(sessionPtr.ID, text, func(chunk string) {
+				fullResponse += chunk
+				a.QueueUpdateDraw(func() {
+					if len(sessionPtr.Messages) > 0 {
+						sessionPtr.Messages[len(sessionPtr.Messages)-1].Content = fullResponse
+						a.chatPanel.UpdateStreaming(fullResponse)
+					}
+				})
+			})
+			a.QueueUpdateDraw(func() {
+				a.isLoading = false
+				if err != nil {
+					sessionPtr.AddMessage(RoleSystem, "Error: "+err.Error())
+				}
+				a.chatPanel.EndStreaming()
+				label := sessionPtr.GenerateLabel()
+				if label != "New Session" {
+					sessionPtr.Label = label
+					for i, s := range a.sessions {
+						if s == sessionPtr {
+							a.tabDock.UpdateTab(i, label)
+							break
+						}
+					}
+				}
+			})
+		}
 	}()
 }
 
@@ -721,10 +754,14 @@ func (a *App) AddWelcomeMessage() {
 	a.chatPanel.SetSession(a.activeSessionPtr())
 }
 
-// AI assistant (placeholder)
+// Session manager and agent setters
 
-func (a *App) SetAIAssistant(ai *service.AIAssistant) {
-	a.aiAssistant = ai
+func (a *App) SetSessionManager(sm *session.Manager) {
+	a.sessionMgr = sm
+}
+
+func (a *App) SetPrimaryAgent(agent *runtime.Agent) {
+	a.primaryAgent = agent
 }
 
 // Theme

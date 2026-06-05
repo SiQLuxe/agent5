@@ -6,6 +6,7 @@ import (
 
 	"github.com/example/agent-tui/internal/agent/orchestrator"
 	"github.com/example/agent-tui/internal/agent/runtime"
+	"github.com/example/agent-tui/internal/agent/session"
 	"github.com/example/agent-tui/internal/agent/tool"
 	"github.com/example/agent-tui/internal/ui"
 )
@@ -49,7 +50,8 @@ func TestEndToEnd_OrchestratorDispatch(t *testing.T) {
 	mock := runtime.NewMockLLMClient([]runtime.LLMResponse{
 		{Type: "final", Content: "Feature implemented"},
 	})
-	agent := runtime.NewAgent(runtime.Config{Name: "coder", SystemPrompt: "test"}, tool.NewRegistry(), mock)
+	sm := session.NewManager()
+	agent := runtime.NewAgent(runtime.Config{Name: "coder", SystemPrompt: "test"}, tool.NewRegistry(), mock, sm)
 	agentReg := orchestrator.NewRegistry()
 	agentReg.Register("coder", agent, "task_execute")
 
@@ -61,7 +63,7 @@ func TestEndToEnd_OrchestratorDispatch(t *testing.T) {
 		Content: "implement login feature",
 	}
 
-	results, err := orch.Dispatch(task)
+	results, err := orch.Dispatch("test-session", task)
 	if err != nil {
 		t.Fatalf("Dispatch failed: %v", err)
 	}
@@ -88,7 +90,8 @@ func TestEndToEnd_AgentReActSteps(t *testing.T) {
 
 	reg := tool.NewRegistry()
 	reg.Register(&mockReadTool{})
-	agent := runtime.NewAgent(runtime.Config{Name: "analyzer", SystemPrompt: "test"}, reg, mock)
+	sm := session.NewManager()
+	agent := runtime.NewAgent(runtime.Config{Name: "analyzer", SystemPrompt: "test"}, reg, mock, sm)
 	agentReg := orchestrator.NewRegistry()
 	agentReg.Register("analyzer", agent, "task_execute")
 
@@ -100,7 +103,7 @@ func TestEndToEnd_AgentReActSteps(t *testing.T) {
 		Content: "analyze the codebase",
 	}
 
-	results, err := orch.Dispatch(task)
+	results, err := orch.Dispatch("test-session", task)
 	if err != nil {
 		t.Fatalf("Dispatch failed: %v", err)
 	}
