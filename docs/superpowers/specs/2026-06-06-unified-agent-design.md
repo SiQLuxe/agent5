@@ -119,11 +119,11 @@ type UnifiedAgent interface {
 
 ### Step 1: Extend LLM Client for tools
 
-Files: `internal/ai/client.go`, `openai.go`, `deepseek.go`, `anthropic.go`
+Files: `internal/ai/client.go`, `openai.go`, `deepseek.go`
 
 - Add `Tools []ToolDefinition` field to `ChatCompletionRequest`
 - Add `ToolCalls []ToolCall` to `ChatCompletionResponse`
-- Implement serialization/deserialization per provider
+- Implement serialization/deserialization per provider (OpenAI-compatible APIs only)
 - Local client skips tools
 
 ### Step 2: Create SessionManager
