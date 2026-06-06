@@ -36,7 +36,7 @@ func (a *aiLLMAdapter) ChatWithTools(msgs []runtime.Message, tools []map[string]
 
 	aiMessages := make([]ai.Message, len(msgs))
 	for i, m := range msgs {
-		aiMessages[i] = ai.Message{Role: m.Role, Content: m.Content}
+		aiMessages[i] = ai.Message{Role: m.Role, Content: m.Content, ToolCallID: m.ToolCallID}
 	}
 
 	aiTools := make([]ai.ToolDefinition, len(tools))
@@ -93,11 +93,18 @@ func (a *aiLLMAdapter) ChatWithToolsStream(msgs []runtime.Message, tools []map[s
 	}
 	aiMessages := make([]ai.Message, len(msgs))
 	for i, m := range msgs {
-		aiMessages[i] = ai.Message{Role: m.Role, Content: m.Content}
+		aiMessages[i] = ai.Message{Role: m.Role, Content: m.Content, ToolCallID: m.ToolCallID}
 	}
+	aiTools := make([]ai.ToolDefinition, len(tools))
+	for i, t := range tools {
+		data, _ := json.Marshal(t)
+		json.Unmarshal(data, &aiTools[i])
+	}
+
 	req := ai.ChatCompletionRequest{
 		Model:    model,
 		Messages: aiMessages,
+		Tools:    aiTools,
 		Stream:   true,
 	}
 	var fullContent string

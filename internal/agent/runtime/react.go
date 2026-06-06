@@ -52,11 +52,14 @@ func (a *Agent) reactLoop(sessionID, task string) (string, error) {
 			result := t.Execute(tc, resp.ToolCall.Arguments)
 			a.Logger.Log("tool_result", fmt.Sprintf("%+v", result.Data), resp.ToolCall.Name, resp.ToolCall.Arguments, &result, time.Since(toolStart))
 
+			toolCallID := resp.ToolCall.Name + "-" + fmt.Sprintf("%d", i)
+			messages = append(messages, Message{Role: "assistant", Content: ""})
+
 			if result.Success {
 				content := fmt.Sprintf("%v", result.Data)
-				messages = append(messages, Message{Role: "tool", Content: content})
+				messages = append(messages, Message{Role: "tool", Content: content, ToolCallID: toolCallID})
 			} else {
-				messages = append(messages, Message{Role: "tool", Content: fmt.Sprintf("error: %s", result.Error)})
+				messages = append(messages, Message{Role: "tool", Content: fmt.Sprintf("error: %s", result.Error), ToolCallID: toolCallID})
 			}
 
 		case "final":
@@ -102,11 +105,14 @@ func (a *Agent) reactLoopStream(sessionID, task string, onChunk func(string)) (s
 			result := t.Execute(tc, resp.ToolCall.Arguments)
 			a.Logger.Log("tool_result", fmt.Sprintf("%+v", result.Data), resp.ToolCall.Name, resp.ToolCall.Arguments, &result, time.Since(toolStart))
 
+			toolCallID := resp.ToolCall.Name + "-" + fmt.Sprintf("%d", i)
+			messages = append(messages, Message{Role: "assistant", Content: ""})
+
 			if result.Success {
 				content := fmt.Sprintf("%v", result.Data)
-				messages = append(messages, Message{Role: "tool", Content: content})
+				messages = append(messages, Message{Role: "tool", Content: content, ToolCallID: toolCallID})
 			} else {
-				messages = append(messages, Message{Role: "tool", Content: fmt.Sprintf("error: %s", result.Error)})
+				messages = append(messages, Message{Role: "tool", Content: fmt.Sprintf("error: %s", result.Error), ToolCallID: toolCallID})
 			}
 
 		case "final":
