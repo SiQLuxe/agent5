@@ -1,6 +1,8 @@
 package ui
 
 import (
+	"os/exec"
+	"runtime"
 	"strings"
 
 	"github.com/gdamore/tcell/v2"
@@ -158,6 +160,29 @@ func (t *SelectableTextView) ClearSelection() *SelectableTextView {
 	return t
 }
 
+func (t *SelectableTextView) copyToClipboard(text string) {
+	if text == "" {
+		return
+	}
+	var cmd *exec.Cmd
+	switch runtime.GOOS {
+	case "windows":
+		cmd = exec.Command("clip")
+	case "darwin":
+		cmd = exec.Command("pbcopy")
+	default:
+		if _, err := exec.LookPath("wl-copy"); err == nil {
+			cmd = exec.Command("wl-copy")
+		} else {
+			cmd = exec.Command("xclip", "-selection", "clipboard")
+		}
+	}
+	if cmd != nil {
+		cmd.Stdin = strings.NewReader(text)
+		cmd.Run()
+	}
+}
+
 func (t *SelectableTextView) SelectAll() *SelectableTextView {
 	lines := t.splitLines(100)
 	if len(lines) == 0 {
@@ -250,7 +275,7 @@ func (t *SelectableTextView) InputHandler() func(event *tcell.EventKey, setFocus
 		switch event.Key() {
 		case tcell.KeyCtrlC, tcell.KeyCtrlQ:
 			if t.HasSelection() {
-				_ = t.GetSelection()
+				t.copyToClipboard(t.GetSelection())
 				t.ClearSelection()
 			}
 		case tcell.KeyCtrlA:
