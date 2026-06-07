@@ -9,7 +9,7 @@ import (
 )
 
 type ChatPanel struct {
-	*tview.TextView
+	*SelectableTextView
 	session        *Session
 	searchQuery    string
 	searchResults  []int
@@ -20,7 +20,7 @@ type ChatPanel struct {
 
 func NewChatPanel() *ChatPanel {
 	c := &ChatPanel{
-		TextView: tview.NewTextView(),
+		SelectableTextView: NewSelectableTextView(),
 	}
 	c.SetDynamicColors(true)
 	c.SetScrollable(true)
