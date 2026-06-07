@@ -177,6 +177,8 @@ func main() {
 	if aiClient != nil {
 		toolReg.Register(&tool.ChatLLMTool{Provider: &aiLLMProvider{client: aiClient}})
 	}
+	subagentMgr := tool.NewSubagentManager(5)
+	toolReg.Register(&tool.TaskTool{Manager: subagentMgr})
 
 	skillRegistry := service.NewSkillRegistry()
 	if err := service.LoadSkillsDir(skillRegistry, "skills"); err != nil {
