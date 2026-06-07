@@ -9,6 +9,14 @@ import (
 	"github.com/google/uuid"
 )
 
+type AgentStatus string
+
+const (
+	StatusRunning   AgentStatus = "running"
+	StatusFailed    AgentStatus = "failed"
+	StatusCancelled AgentStatus = "cancelled"
+)
+
 type SubAgentConfig struct {
 	Name         string
 	SystemPrompt string
@@ -20,7 +28,7 @@ type SubAgent struct {
 	ID        string
 	Name      string
 	Config    SubAgentConfig
-	Status    string
+	Status    AgentStatus
 	Result    string
 	Error     string
 	CreatedAt time.Time
@@ -50,7 +58,7 @@ func (m *SubagentManager) Spawn(ctx context.Context, cfg SubAgentConfig) *SubAge
 
 	running := 0
 	for _, a := range m.agents {
-		if a.Status == "running" {
+		if a.Status == StatusRunning {
 			running++
 		}
 	}
@@ -59,7 +67,7 @@ func (m *SubagentManager) Spawn(ctx context.Context, cfg SubAgentConfig) *SubAge
 			ID:     uuid.New().String(),
 			Name:   cfg.Name,
 			Config: cfg,
-			Status: "failed",
+			Status: StatusFailed,
 			Error:  fmt.Sprintf("max concurrent agents reached (%d)", m.max),
 		}
 	}
@@ -69,29 +77,23 @@ func (m *SubagentManager) Spawn(ctx context.Context, cfg SubAgentConfig) *SubAge
 		ID:        uuid.New().String(),
 		Name:      cfg.Name,
 		Config:    cfg,
-		Status:    "running",
+		Status:    StatusRunning,
 		CreatedAt: time.Now(),
 		ctx:       childCtx,
 		cancel:    cancel,
 	}
 	m.agents[sa.ID] = sa
-
-	go func() {
-		<-childCtx.Done()
-		m.mu.Lock()
-		if a, ok := m.agents[sa.ID]; ok && a.Status == "running" {
-			a.Status = "cancelled"
-		}
-		m.mu.Unlock()
-	}()
-
 	return sa
 }
 
 func (m *SubagentManager) Get(id string) *SubAgent {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
-	return m.agents[id]
+	if a, ok := m.agents[id]; ok {
+		copy := *a
+		return &copy
+	}
+	return nil
 }
 
 func (m *SubagentManager) List() []*SubAgent {
@@ -99,7 +101,8 @@ func (m *SubagentManager) List() []*SubAgent {
 	defer m.mu.RUnlock()
 	out := make([]*SubAgent, 0, len(m.agents))
 	for _, a := range m.agents {
-		out = append(out, a)
+		copy := *a
+		out = append(out, &copy)
 	}
 	return out
 }
@@ -109,7 +112,7 @@ func (m *SubagentManager) Cancel(id string) {
 	defer m.mu.Unlock()
 	if a, ok := m.agents[id]; ok {
 		a.cancel()
-		a.Status = "cancelled"
+		a.Status = StatusCancelled
 	}
 }
 
@@ -117,7 +120,7 @@ func (m *SubagentManager) IsCancelled(id string) bool {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 	if a, ok := m.agents[id]; ok {
-		if a.Status == "cancelled" {
+		if a.Status == StatusCancelled {
 			return true
 		}
 		select {
@@ -130,12 +133,21 @@ func (m *SubagentManager) IsCancelled(id string) bool {
 	return false
 }
 
+func (m *SubagentManager) Remove(id string) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if a, ok := m.agents[id]; ok {
+		a.cancel()
+		delete(m.agents, id)
+	}
+}
+
 func (m *SubagentManager) RunningCount() int {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 	count := 0
 	for _, a := range m.agents {
-		if a.Status == "running" {
+		if a.Status == StatusRunning {
 			count++
 		}
 	}
