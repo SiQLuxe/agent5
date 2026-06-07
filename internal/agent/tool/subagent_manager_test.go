@@ -143,6 +143,34 @@ func TestSubagentManagerFail(t *testing.T) {
 	}
 }
 
+func TestSubagentManagerHeartbeat(t *testing.T) {
+	mgr := NewSubagentManager(5)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	sa := mgr.Spawn(ctx, SubAgentConfig{Name: "test", MaxDepth: 5})
+	// Heartbeat should not panic and should keep agent running
+	mgr.Heartbeat(sa.ID)
+	got := mgr.Get(sa.ID)
+	if got.Status != StatusRunning {
+		t.Errorf("expected running after heartbeat, got '%s'", got.Status)
+	}
+}
+
+func TestSubagentManagerCompleteCancelsContext(t *testing.T) {
+	mgr := NewSubagentManager(5)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	sa := mgr.Spawn(ctx, SubAgentConfig{Name: "test", MaxDepth: 5})
+	mgr.Complete(sa.ID, "done")
+
+	// After Complete, IsCancelled should return true (ctx cancelled)
+	if !mgr.IsCancelled(sa.ID) {
+		t.Fatal("expected context to be cancelled after Complete")
+	}
+}
+
 func TestSubagentManagerDepthLimit(t *testing.T) {
 	mgr := NewSubagentManager(5)
 	ctx := context.Background()

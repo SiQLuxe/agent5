@@ -18,6 +18,11 @@ const (
 	StatusCompleted AgentStatus = "completed"
 )
 
+const (
+	heartbeatInterval    = 30 * time.Second
+	heartbeatTimeoutMult = 2
+)
+
 type SubAgentConfig struct {
 	Name         string
 	SystemPrompt string
@@ -98,7 +103,7 @@ func (m *SubagentManager) Spawn(ctx context.Context, cfg SubAgentConfig) *SubAge
 	m.agents[sa.ID] = sa
 
 	go func() {
-		ticker := time.NewTicker(30 * time.Second)
+		ticker := time.NewTicker(heartbeatInterval)
 		defer ticker.Stop()
 		for {
 			select {
@@ -106,8 +111,8 @@ func (m *SubagentManager) Spawn(ctx context.Context, cfg SubAgentConfig) *SubAge
 				return
 			case <-ticker.C:
 				m.mu.Lock()
-				if a, ok := m.agents[sa.ID]; ok {
-					if time.Since(a.lastHeartbeat) > 2*30*time.Second {
+				if a, ok := m.agents[sa.ID]; ok && a.Status == StatusRunning {
+					if time.Since(a.lastHeartbeat) > heartbeatInterval*heartbeatTimeoutMult {
 						a.Status = StatusFailed
 						a.Error = "agent heartbeat timeout"
 						a.cancel()
@@ -194,6 +199,7 @@ func (m *SubagentManager) Complete(id, result string) {
 	if a, ok := m.agents[id]; ok {
 		a.Status = StatusCompleted
 		a.Result = result
+		a.cancel()
 	}
 }
 
@@ -203,6 +209,7 @@ func (m *SubagentManager) Fail(id, errMsg string) {
 	if a, ok := m.agents[id]; ok {
 		a.Status = StatusFailed
 		a.Error = errMsg
+		a.cancel()
 	}
 }
 
