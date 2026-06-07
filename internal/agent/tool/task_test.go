@@ -4,6 +4,26 @@ import (
 	"testing"
 )
 
+type blockingRunner struct {
+	ready  chan struct{}
+	unblock chan struct{}
+	result string
+}
+
+func newBlockingRunner() *blockingRunner {
+	return &blockingRunner{
+		ready:   make(chan struct{}),
+		unblock: make(chan struct{}),
+		result:  "ok",
+	}
+}
+
+func (r *blockingRunner) Run(sessionID, task, systemPrompt string, tools *Registry) (string, error) {
+	close(r.ready)
+	<-r.unblock
+	return r.result, nil
+}
+
 func TestTaskToolName(t *testing.T) {
 	mgr := NewSubagentManager(5)
 	tool := &TaskTool{Manager: mgr, Depth: 3}
@@ -83,21 +103,22 @@ func TestTaskToolExecuteMissingFields(t *testing.T) {
 
 func TestTaskToolExecuteMaxConcurrent(t *testing.T) {
 	mgr := NewSubagentManager(1)
+	br := newBlockingRunner()
 	tool := &TaskTool{
 		Manager: mgr,
-		Runner:  &mockRunner{result: "ok"},
+		Runner:  br,
 		Depth:   3,
 	}
 
-	r1 := tool.Execute(ToolContext{}, map[string]interface{}{
+	// Launch first task in goroutine (will block in runner)
+	go tool.Execute(ToolContext{}, map[string]interface{}{
 		"description":   "task 1",
 		"prompt":        "do 1",
 		"subagent_type": "general",
 	})
-	if !r1.Success {
-		t.Fatalf("first task should succeed: %s", r1.Error)
-	}
+	<-br.ready // wait for runner to start
 
+	// Second task should fail (concurrency limit)
 	r2 := tool.Execute(ToolContext{}, map[string]interface{}{
 		"description":   "task 2",
 		"prompt":        "do 2",
@@ -106,6 +127,8 @@ func TestTaskToolExecuteMaxConcurrent(t *testing.T) {
 	if r2.Success {
 		t.Fatal("second task should fail (concurrency limit)")
 	}
+
+	close(br.unblock) // unblock first task
 }
 
 func TestTaskToolExecuteBackground(t *testing.T) {

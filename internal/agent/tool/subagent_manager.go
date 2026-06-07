@@ -63,7 +63,13 @@ func (m *SubagentManager) Spawn(ctx context.Context, cfg SubAgentConfig) *SubAge
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	if len(m.agents) >= m.max {
+	running := 0
+	for _, a := range m.agents {
+		if a.Status == StatusRunning {
+			running++
+		}
+	}
+	if running >= m.max {
 		return &SubAgent{
 			ID:     uuid.New().String(),
 			Name:   cfg.Name,
