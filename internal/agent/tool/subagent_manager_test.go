@@ -14,6 +14,7 @@ func TestSubagentManagerSpawn(t *testing.T) {
 		Name:         "test-agent",
 		SystemPrompt: "You are a test agent",
 		Model:        "test-model",
+		MaxDepth:     5,
 	})
 	if sa.ID == "" {
 		t.Fatal("expected non-empty agent ID")
@@ -38,9 +39,9 @@ func TestSubagentManagerConcurrencyLimit(t *testing.T) {
 	mgr := NewSubagentManager(2)
 	ctx := context.Background()
 
-	sa1 := mgr.Spawn(ctx, SubAgentConfig{Name: "agent1"})
-	sa2 := mgr.Spawn(ctx, SubAgentConfig{Name: "agent2"})
-	sa3 := mgr.Spawn(ctx, SubAgentConfig{Name: "agent3"})
+	sa1 := mgr.Spawn(ctx, SubAgentConfig{Name: "agent1", MaxDepth: 5})
+	sa2 := mgr.Spawn(ctx, SubAgentConfig{Name: "agent2", MaxDepth: 5})
+	sa3 := mgr.Spawn(ctx, SubAgentConfig{Name: "agent3", MaxDepth: 5})
 
 	if sa1.Status != StatusRunning {
 		t.Errorf("sa1 should be '%s', got '%s'", StatusRunning, sa1.Status)
@@ -60,7 +61,7 @@ func TestSubagentManagerCancel(t *testing.T) {
 	mgr := NewSubagentManager(5)
 	ctx, cancel := context.WithCancel(context.Background())
 
-	sa := mgr.Spawn(ctx, SubAgentConfig{Name: "test-agent"})
+	sa := mgr.Spawn(ctx, SubAgentConfig{Name: "test-agent", MaxDepth: 5})
 	cancel()
 	if !mgr.IsCancelled(sa.ID) {
 		t.Fatal("expected agent to be cancelled after context cancel")
@@ -71,8 +72,8 @@ func TestSubagentManagerList(t *testing.T) {
 	mgr := NewSubagentManager(5)
 	ctx := context.Background()
 
-	mgr.Spawn(ctx, SubAgentConfig{Name: "alpha"})
-	mgr.Spawn(ctx, SubAgentConfig{Name: "beta"})
+	mgr.Spawn(ctx, SubAgentConfig{Name: "alpha", MaxDepth: 5})
+	mgr.Spawn(ctx, SubAgentConfig{Name: "beta", MaxDepth: 5})
 
 	agents := mgr.List()
 	if len(agents) != 2 {
@@ -84,7 +85,7 @@ func TestSubagentManagerRemove(t *testing.T) {
 	mgr := NewSubagentManager(5)
 	ctx := context.Background()
 
-	sa := mgr.Spawn(ctx, SubAgentConfig{Name: "test"})
+	sa := mgr.Spawn(ctx, SubAgentConfig{Name: "test", MaxDepth: 5})
 	if sa.Status != StatusRunning {
 		t.Fatalf("expected running, got %s", sa.Status)
 	}
@@ -99,11 +100,58 @@ func TestSubagentManagerGetReturnsCopy(t *testing.T) {
 	mgr := NewSubagentManager(5)
 	ctx := context.Background()
 
-	sa := mgr.Spawn(ctx, SubAgentConfig{Name: "test"})
+	sa := mgr.Spawn(ctx, SubAgentConfig{Name: "test", MaxDepth: 5})
 	got1 := mgr.Get(sa.ID)
 	got2 := mgr.Get(sa.ID)
 
 	if got1 == got2 {
 		t.Fatal("Get() should return copies, not the same pointer")
+	}
+}
+
+func TestSubagentManagerComplete(t *testing.T) {
+	mgr := NewSubagentManager(5)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	sa := mgr.Spawn(ctx, SubAgentConfig{Name: "test", MaxDepth: 5})
+	mgr.Complete(sa.ID, "done")
+
+	got := mgr.Get(sa.ID)
+	if got.Status != StatusCompleted {
+		t.Errorf("expected '%s', got '%s'", StatusCompleted, got.Status)
+	}
+	if got.Result != "done" {
+		t.Errorf("expected result 'done', got %s", got.Result)
+	}
+}
+
+func TestSubagentManagerFail(t *testing.T) {
+	mgr := NewSubagentManager(5)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	sa := mgr.Spawn(ctx, SubAgentConfig{Name: "test", MaxDepth: 5})
+	mgr.Fail(sa.ID, "something went wrong")
+
+	got := mgr.Get(sa.ID)
+	if got.Status != StatusFailed {
+		t.Errorf("expected '%s', got '%s'", StatusFailed, got.Status)
+	}
+	if got.Error != "something went wrong" {
+		t.Errorf("expected error 'something went wrong', got %s", got.Error)
+	}
+}
+
+func TestSubagentManagerDepthLimit(t *testing.T) {
+	mgr := NewSubagentManager(5)
+	ctx := context.Background()
+
+	sa := mgr.Spawn(ctx, SubAgentConfig{Name: "deep", MaxDepth: 0})
+	if sa.Status != StatusFailed {
+		t.Errorf("expected failed (depth limit), got '%s'", sa.Status)
+	}
+	if sa.Error == "" {
+		t.Fatal("expected error message about depth limit")
 	}
 }

@@ -15,6 +15,7 @@ const (
 	StatusRunning   AgentStatus = "running"
 	StatusFailed    AgentStatus = "failed"
 	StatusCancelled AgentStatus = "cancelled"
+	StatusCompleted AgentStatus = "completed"
 )
 
 type SubAgentConfig struct {
@@ -25,15 +26,16 @@ type SubAgentConfig struct {
 }
 
 type SubAgent struct {
-	ID        string
-	Name      string
-	Config    SubAgentConfig
-	Status    AgentStatus
-	Result    string
-	Error     string
-	CreatedAt time.Time
-	ctx       context.Context
-	cancel    context.CancelFunc
+	ID            string
+	Name          string
+	Config        SubAgentConfig
+	Status        AgentStatus
+	Result        string
+	Error         string
+	CreatedAt     time.Time
+	lastHeartbeat time.Time
+	ctx           context.Context
+	cancel        context.CancelFunc
 }
 
 type SubagentManager struct {
@@ -72,17 +74,49 @@ func (m *SubagentManager) Spawn(ctx context.Context, cfg SubAgentConfig) *SubAge
 		}
 	}
 
+	if cfg.MaxDepth <= 0 {
+		return &SubAgent{
+			ID:     uuid.New().String(),
+			Name:   cfg.Name,
+			Config: cfg,
+			Status: StatusFailed,
+			Error:  "max nesting depth reached",
+		}
+	}
+
 	childCtx, cancel := context.WithCancel(ctx)
 	sa := &SubAgent{
-		ID:        uuid.New().String(),
-		Name:      cfg.Name,
-		Config:    cfg,
-		Status:    StatusRunning,
-		CreatedAt: time.Now(),
-		ctx:       childCtx,
-		cancel:    cancel,
+		ID:            uuid.New().String(),
+		Name:          cfg.Name,
+		Config:        cfg,
+		Status:        StatusRunning,
+		CreatedAt:     time.Now(),
+		lastHeartbeat: time.Now(),
+		ctx:           childCtx,
+		cancel:        cancel,
 	}
 	m.agents[sa.ID] = sa
+
+	go func() {
+		ticker := time.NewTicker(30 * time.Second)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-childCtx.Done():
+				return
+			case <-ticker.C:
+				m.mu.Lock()
+				if a, ok := m.agents[sa.ID]; ok {
+					if time.Since(a.lastHeartbeat) > 2*30*time.Second {
+						a.Status = StatusFailed
+						a.Error = "agent heartbeat timeout"
+						a.cancel()
+					}
+				}
+				m.mu.Unlock()
+			}
+		}
+	}()
 	return sa
 }
 
@@ -152,4 +186,30 @@ func (m *SubagentManager) RunningCount() int {
 		}
 	}
 	return count
+}
+
+func (m *SubagentManager) Complete(id, result string) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if a, ok := m.agents[id]; ok {
+		a.Status = StatusCompleted
+		a.Result = result
+	}
+}
+
+func (m *SubagentManager) Fail(id, errMsg string) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if a, ok := m.agents[id]; ok {
+		a.Status = StatusFailed
+		a.Error = errMsg
+	}
+}
+
+func (m *SubagentManager) Heartbeat(id string) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if a, ok := m.agents[id]; ok {
+		a.lastHeartbeat = time.Now()
+	}
 }
