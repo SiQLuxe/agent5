@@ -47,6 +47,53 @@ func TestSelectableTextView_Clear(t *testing.T) {
 	}
 }
 
+func TestSelectableTextView_ColorTags(t *testing.T) {
+	tv := NewSelectableTextView()
+	tv.SetDynamicColors(true)
+	tv.SetText(`[red]hello[-] [blue]world[-]`)
+	// GetText(stripAllTags=true) should strip color tags
+	result := tv.GetText(true)
+	if result != "hello world" {
+		t.Fatalf("expected 'hello world', got %q", result)
+	}
+}
+
+func TestSelectableTextView_Highlight(t *testing.T) {
+	tv := NewSelectableTextView()
+	tv.SetRegions(true)
+	tv.SetText(`before ["id"]highlight[""] after`)
+	tv.Highlight("id")
+	if tv.GetText(true) != "before highlight after" {
+		t.Fatalf("unexpected stripped text: %q", tv.GetText(true))
+	}
+	// Draw with highlight should not panic
+	tv.SetRect(0, 0, 30, 3)
+	screen := tcell.NewSimulationScreen("")
+	if err := screen.Init(); err != nil {
+		t.Fatal(err)
+	}
+	defer screen.Fini()
+	screen.SetSize(30, 3)
+	tv.Draw(screen)
+	screen.Show()
+}
+
+func TestSelectableTextView_WordWrap(t *testing.T) {
+	tv := NewSelectableTextView()
+	tv.SetWordWrap(true)
+	tv.SetText("hello world foo bar")
+	lines := tv.splitLines(10)
+	if len(lines) < 2 {
+		t.Fatalf("expected multiple lines from word wrap, got %d", len(lines))
+	}
+	// Each line should not exceed wrap width
+	for i, line := range lines {
+		if len(line) > 10 {
+			t.Fatalf("line %d exceeds wrap width: %d > 10", i, len(line))
+		}
+	}
+}
+
 func TestSelectableTextView_Write(t *testing.T) {
 	tv := NewSelectableTextView()
 	n, err := tv.Write([]byte("hello"))

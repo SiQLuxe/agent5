@@ -7,6 +7,11 @@ import (
 	"github.com/rivo/tview"
 )
 
+type cellInfo struct {
+	ch    rune
+	style tcell.Style
+}
+
 type SelectableTextView struct {
 	*tview.Box
 	text          string
@@ -99,6 +104,11 @@ func (t *SelectableTextView) Write(p []byte) (n int, err error) {
 	return len(p), nil
 }
 
+func (t *SelectableTextView) Highlight(regionIDs ...string) *SelectableTextView {
+	t.highlights = regionIDs
+	return t
+}
+
 func (t *SelectableTextView) Draw(screen tcell.Screen) {
 	t.Box.Draw(screen)
 	if t.text == "" {
@@ -109,22 +119,186 @@ func (t *SelectableTextView) Draw(screen tcell.Screen) {
 		return
 	}
 
-	lines := t.splitLines(width)
-	style := tcell.StyleDefault.Background(t.GetBackgroundColor())
+	cells := t.parseCells(width)
+	defaultStyle := tcell.StyleDefault.Background(t.GetBackgroundColor())
 
-	for lineIdx := 0; lineIdx < len(lines) && lineIdx < height; lineIdx++ {
-		line := lines[lineIdx]
+	for lineIdx := 0; lineIdx < len(cells) && lineIdx < height; lineIdx++ {
+		line := cells[lineIdx]
 		drawX := x
 		for col := 0; col < len(line) && drawX < x+width; col++ {
-			ch := line[col]
-			cellStyle := style
+			cell := line[col]
+			cellStyle := cell.style
+			if cellStyle == (tcell.Style{}) {
+				cellStyle = defaultStyle
+			}
 			if t.selectionVisible && t.isInSelection(lineIdx, col) {
 				cellStyle = cellStyle.Reverse(true)
 			}
-			screen.SetContent(drawX, y+lineIdx, ch, nil, cellStyle)
+			screen.SetContent(drawX, y+lineIdx, cell.ch, nil, cellStyle)
 			drawX++
 		}
 	}
+}
+
+func (t *SelectableTextView) parseCells(width int) [][]cellInfo {
+	text := t.text
+	if t.dynamicColors {
+		text = tview.TranslateANSI(text)
+	}
+	return parseStyledText(text, width, t.wordWrap, t.dynamicColors, t.regions, t.highlights)
+}
+
+type styleState struct {
+	fg, bg                           tcell.Color
+	bold, underline, reverse, blink bool
+}
+
+func buildStyle(s styleState) tcell.Style {
+	st := tcell.StyleDefault.Foreground(s.fg).Background(s.bg)
+	if s.bold {
+		st = st.Bold(true)
+	}
+	if s.underline {
+		st = st.Underline(true)
+	}
+	if s.reverse {
+		st = st.Reverse(true)
+	}
+	if s.blink {
+		st = st.Blink(true)
+	}
+	return st
+}
+
+func parseStyledText(text string, width int, wordWrap, dynamicColors, regions bool, highlights []string) [][]cellInfo {
+	cur := styleState{fg: tcell.ColorDefault, bg: tcell.ColorDefault}
+
+	var lines [][]cellInfo
+	var curLine []cellInfo
+
+	flushLine := func() {
+		if len(curLine) > 0 {
+			lines = append(lines, curLine)
+			curLine = nil
+		}
+	}
+
+	highlightSet := make(map[string]bool, len(highlights))
+	for _, h := range highlights {
+		highlightSet[h] = true
+	}
+
+	resetStyle := func() {
+		cur = styleState{fg: tcell.ColorDefault, bg: tcell.ColorDefault}
+	}
+
+	runes := []rune(text)
+	for i := 0; i < len(runes); i++ {
+		if runes[i] == '[' && dynamicColors {
+			end := strings.Index(string(runes[i:]), "]")
+			if end < 0 {
+				cell := cellInfo{ch: '[', style: buildStyle(cur)}
+				curLine = append(curLine, cell)
+				continue
+			}
+			tag := string(runes[i+1 : i+end])
+			i += end
+
+			if tag == "" {
+				continue
+			}
+
+			if tag[0] == '"' {
+				if regions {
+					regionID := strings.Trim(tag, "\"")
+					if regionID != "" && highlightSet[regionID] {
+						cur.reverse = !cur.reverse
+					}
+				}
+				continue
+			}
+
+			if tag == "-" || tag == ":-" || tag == "::-" {
+				resetStyle()
+				continue
+			}
+
+			parts := strings.Split(tag, ":")
+			for j := range parts {
+				parts[j] = strings.TrimSpace(parts[j])
+			}
+
+			if len(parts) >= 1 && parts[0] != "" && parts[0] != "-" {
+				cur.fg = tcell.GetColor(parts[0])
+			}
+			if len(parts) >= 2 {
+				if parts[1] == "-" {
+					cur.bg = tcell.ColorDefault
+				} else if parts[1] != "" {
+					cur.bg = tcell.GetColor(parts[1])
+				}
+			}
+			if len(parts) >= 3 {
+				for _, attr := range parts[2] {
+					switch attr {
+					case 'b':
+						cur.bold = true
+					case 'u':
+						cur.underline = true
+					case 'r':
+						cur.reverse = true
+					}
+				}
+			}
+			continue
+		}
+
+		if runes[i] == '\n' {
+			flushLine()
+			continue
+		}
+
+		cell := cellInfo{ch: runes[i], style: buildStyle(cur)}
+		curLine = append(curLine, cell)
+	}
+	flushLine()
+
+	if wordWrap && width > 0 {
+		lines = applyWordWrap(lines, width)
+	}
+	return lines
+}
+
+func applyWordWrap(lines [][]cellInfo, width int) [][]cellInfo {
+	var result [][]cellInfo
+	for _, line := range lines {
+		if len(line) <= width {
+			result = append(result, line)
+			continue
+		}
+		start := 0
+		for start < len(line) {
+			end := start + width
+			if end > len(line) {
+				end = len(line)
+			}
+			breakAt := end
+			if end < len(line) {
+				for j := end; j > start; j-- {
+					if line[j-1].ch == ' ' {
+						breakAt = j - 1
+						break
+					}
+				}
+			}
+			if breakAt <= start {
+				breakAt = end
+			}
+			result = append(result, line[start:breakAt])
+			start = breakAt + 1
+		}
+	}
+	return result
 }
 
 func (t *SelectableTextView) splitLines(width int) [][]rune {
@@ -153,19 +327,16 @@ func (t *SelectableTextView) splitLines(width int) [][]rune {
 			if end < len(runes) {
 				for j := end; j > start; j-- {
 					if runes[j-1] == ' ' {
-						breakAt = j
+						breakAt = j - 1
 						break
 					}
 				}
 			}
-			if breakAt == start {
+			if breakAt <= start {
 				breakAt = end
 			}
 			result = append(result, runes[start:breakAt])
-			start = breakAt
-			if start < len(runes) && runes[start] == ' ' {
-				start++
-			}
+			start = breakAt + 1
 		}
 	}
 	return result
