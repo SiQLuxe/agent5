@@ -18,6 +18,7 @@ type Message struct {
 type SessionInfo struct {
 	ID        string
 	Name      string
+	ParentID  string
 	CreatedAt time.Time
 }
 
@@ -42,6 +43,21 @@ func (h *History) CreateSession(name string) string {
 	h.sessions[id] = SessionInfo{
 		ID:        id,
 		Name:      name,
+		CreatedAt: time.Now(),
+	}
+	h.messages[id] = []Message{}
+	return id
+}
+
+func (h *History) CreateChildSession(name, parentID string) string {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+
+	id := uuid.New().String()
+	h.sessions[id] = SessionInfo{
+		ID:        id,
+		Name:      name,
+		ParentID:  parentID,
 		CreatedAt: time.Now(),
 	}
 	h.messages[id] = []Message{}

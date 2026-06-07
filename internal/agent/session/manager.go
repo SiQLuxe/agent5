@@ -33,6 +33,11 @@ func (m *Manager) CreateSession(name string) string {
 	return m.history.CreateSession(name)
 }
 
+func (m *Manager) CreateChildSession(parentID, name string) string {
+	childID := m.history.CreateChildSession(name, parentID)
+	return childID
+}
+
 func (m *Manager) ListSessions() []history.SessionInfo {
 	return m.history.GetSessions()
 }
