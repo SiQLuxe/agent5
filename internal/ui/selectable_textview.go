@@ -109,6 +109,172 @@ func (t *SelectableTextView) Highlight(regionIDs ...string) *SelectableTextView 
 	return t
 }
 
+func (t *SelectableTextView) HasSelection() bool {
+	return t.selectionVisible
+}
+
+func (t *SelectableTextView) GetSelection() string {
+	if !t.selectionVisible {
+		return ""
+	}
+	lines := t.splitLines(100)
+	if len(lines) == 0 {
+		return ""
+	}
+	startRow, startCol := t.selectAnchorRow, t.selectAnchorCol
+	endRow, endCol := t.selectEndRow, t.selectEndCol
+	if startRow > endRow || (startRow == endRow && startCol > endCol) {
+		startRow, startCol = endRow, endCol
+		endRow, endCol = t.selectAnchorRow, t.selectAnchorCol
+	}
+	var sel strings.Builder
+	for r := startRow; r <= endRow && r < len(lines); r++ {
+		line := string(lines[r])
+		if r == startRow && r == endRow {
+			if startCol < len(line) && endCol <= len(line) {
+				sel.WriteString(line[startCol:endCol])
+			}
+		} else if r == startRow {
+			if startCol < len(line) {
+				sel.WriteString(line[startCol:])
+			}
+		} else if r == endRow {
+			if endCol <= len(line) {
+				sel.WriteString(line[:endCol])
+			}
+		} else {
+			sel.WriteString(line)
+		}
+		if r < endRow {
+			sel.WriteString("\n")
+		}
+	}
+	return sel.String()
+}
+
+func (t *SelectableTextView) ClearSelection() *SelectableTextView {
+	t.selecting = false
+	t.selectionVisible = false
+	return t
+}
+
+func (t *SelectableTextView) SelectAll() *SelectableTextView {
+	lines := t.splitLines(100)
+	if len(lines) == 0 {
+		return t
+	}
+	t.selectAnchorRow = 0
+	t.selectAnchorCol = 0
+	lastLine := len(lines) - 1
+	t.selectEndRow = lastLine
+	t.selectEndCol = len(lines[lastLine])
+	t.selectionVisible = true
+	return t
+}
+
+func (t *SelectableTextView) ScrollTo(row, column int) *SelectableTextView {
+	t.scrollOffset = row
+	if t.scrollOffset < 0 {
+		t.scrollOffset = 0
+	}
+	return t
+}
+
+func (t *SelectableTextView) ScrollToEnd() *SelectableTextView {
+	t.scrollOffset = -1
+	return t
+}
+
+func (t *SelectableTextView) GetScrollOffset() (row, column int) {
+	if t.scrollOffset < 0 {
+		return 0, 0
+	}
+	return t.scrollOffset, 0
+}
+
+func (t *SelectableTextView) handleMousePress(line, col int) {
+	t.selectAnchorRow = line
+	t.selectAnchorCol = col
+	t.selectEndRow = line
+	t.selectEndCol = col
+	t.selecting = true
+	t.selectionVisible = false
+}
+
+func (t *SelectableTextView) handleMouseDrag(line, col int) {
+	if !t.selecting {
+		return
+	}
+	t.selectEndRow = line
+	t.selectEndCol = col
+	t.selectionVisible = true
+}
+
+func (t *SelectableTextView) handleMouseRelease() {
+	t.selecting = false
+}
+
+func (t *SelectableTextView) MouseHandler() func(action tview.MouseAction, event *tcell.EventMouse, setFocus func(p tview.Primitive)) (consumed bool, capture tview.Primitive) {
+	return t.WrapMouseHandler(func(action tview.MouseAction, event *tcell.EventMouse, setFocus func(p tview.Primitive)) (consumed bool, capture tview.Primitive) {
+		x, y := event.Position()
+		switch action {
+		case tview.MouseLeftDown:
+			setFocus(t)
+			innerX, innerY, _, _ := t.Box.GetInnerRect()
+			line := y - innerY
+			col := x - innerX
+			if line >= 0 && col >= 0 {
+				t.handleMousePress(line, col)
+				consumed = true
+			}
+		case tview.MouseMove:
+			if t.selecting {
+				innerX, innerY, _, _ := t.Box.GetInnerRect()
+				line := y - innerY
+				col := x - innerX
+				if line >= 0 && col >= 0 {
+					t.handleMouseDrag(line, col)
+				}
+				consumed = true
+			}
+		case tview.MouseLeftUp:
+			t.handleMouseRelease()
+			consumed = true
+		}
+		return
+	})
+}
+
+func (t *SelectableTextView) InputHandler() func(event *tcell.EventKey, setFocus func(p tview.Primitive)) {
+	return t.WrapInputHandler(func(event *tcell.EventKey, setFocus func(p tview.Primitive)) {
+		switch event.Key() {
+		case tcell.KeyCtrlC, tcell.KeyCtrlQ:
+			if t.HasSelection() {
+				_ = t.GetSelection()
+				t.ClearSelection()
+			}
+		case tcell.KeyCtrlA:
+			t.SelectAll()
+		case tcell.KeyEscape:
+			t.ClearSelection()
+		case tcell.KeyUp:
+			row, _ := t.GetScrollOffset()
+			t.ScrollTo(row-1, 0)
+		case tcell.KeyDown:
+			row, _ := t.GetScrollOffset()
+			t.ScrollTo(row+1, 0)
+		case tcell.KeyPgUp:
+			_, _, _, height := t.GetInnerRect()
+			row, _ := t.GetScrollOffset()
+			t.ScrollTo(row-height, 0)
+		case tcell.KeyPgDn:
+			_, _, _, height := t.GetInnerRect()
+			row, _ := t.GetScrollOffset()
+			t.ScrollTo(row+height, 0)
+		}
+	})
+}
+
 func (t *SelectableTextView) Draw(screen tcell.Screen) {
 	t.Box.Draw(screen)
 	if t.text == "" {

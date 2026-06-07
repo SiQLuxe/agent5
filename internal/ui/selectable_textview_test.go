@@ -94,6 +94,80 @@ func TestSelectableTextView_WordWrap(t *testing.T) {
 	}
 }
 
+func TestSelectableTextView_SelectAll(t *testing.T) {
+	tv := NewSelectableTextView()
+	tv.SetRect(0, 0, 20, 5)
+	tv.SetText("hello world")
+	tv.SelectAll()
+	if !tv.HasSelection() {
+		t.Fatal("SelectAll should create selection")
+	}
+	if tv.GetSelection() != "hello world" {
+		t.Fatalf("expected 'hello world', got %q", tv.GetSelection())
+	}
+}
+
+func TestSelectableTextView_ClearSelection(t *testing.T) {
+	tv := NewSelectableTextView()
+	tv.SetText("hello world")
+	tv.SelectAll()
+	tv.ClearSelection()
+	if tv.HasSelection() {
+		t.Fatal("ClearSelection should clear selection")
+	}
+}
+
+func TestSelectableTextView_GetSelectionMultiline(t *testing.T) {
+	tv := NewSelectableTextView()
+	tv.SetText("line one\nline two\nline three")
+	tv.SelectAll()
+	sel := tv.GetSelection()
+	if sel != "line one\nline two\nline three" {
+		t.Fatalf("unexpected multiline selection: %q", sel)
+	}
+}
+
+func TestSelectableTextView_ScrollTo(t *testing.T) {
+	tv := NewSelectableTextView()
+	tv.ScrollTo(5, 0)
+	row, col := tv.GetScrollOffset()
+	if row != 5 || col != 0 {
+		t.Fatalf("expected (5,0), got (%d,%d)", row, col)
+	}
+	tv.ScrollTo(-1, 0)
+	row, _ = tv.GetScrollOffset()
+	if row != 0 {
+		t.Fatalf("expected 0 after negative scroll, got %d", row)
+	}
+}
+
+func TestSelectableTextView_ScrollToEnd(t *testing.T) {
+	tv := NewSelectableTextView()
+	tv.ScrollToEnd()
+	row, col := tv.GetScrollOffset()
+	if row != 0 || col != 0 {
+		t.Fatalf("expected (0,0), got (%d,%d)", row, col)
+	}
+}
+
+func TestSelectableTextView_MouseHandler(t *testing.T) {
+	tv := NewSelectableTextView()
+	tv.SetRect(0, 0, 20, 5)
+	tv.SetText("hello world select this")
+	// Test internal mouse methods
+	tv.handleMousePress(0, 6)
+	tv.handleMouseDrag(0, 20)
+	tv.handleMouseRelease()
+
+	if !tv.HasSelection() {
+		t.Fatal("expected selection after mouse drag")
+	}
+	sel := tv.GetSelection()
+	if len(sel) == 0 {
+		t.Fatal("expected non-empty selection")
+	}
+}
+
 func TestSelectableTextView_Write(t *testing.T) {
 	tv := NewSelectableTextView()
 	n, err := tv.Write([]byte("hello"))
