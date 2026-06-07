@@ -177,8 +177,7 @@ func main() {
 	if aiClient != nil {
 		toolReg.Register(&tool.ChatLLMTool{Provider: &aiLLMProvider{client: aiClient}})
 	}
-	subagentMgr := tool.NewSubagentManager(5)
-	toolReg.Register(&tool.TaskTool{Manager: subagentMgr})
+	subagentMgr := tool.NewSubagentManager(cfg.MaxSubagents)
 
 	skillRegistry := service.NewSkillRegistry()
 	if err := service.LoadSkillsDir(skillRegistry, "skills"); err != nil {
@@ -212,6 +211,23 @@ func main() {
 	}
 
 	agentLLM := &aiLLMAdapter{client: aiClient, model: cfg.DefaultClient}
+	agentRunner := &runtime.AgentRunner{
+		BaseConfig: runtime.Config{
+			Model:        cfg.DefaultClient,
+			MaxReActLoop: 20,
+			Temperature:  0.7,
+			ContextLimit: 50,
+		},
+		LLM:     agentLLM,
+		Session: sm,
+	}
+	toolReg.Register(&tool.TaskTool{
+		Manager: subagentMgr,
+		Runner:  agentRunner,
+		Session: sm,
+		Tools:   toolReg,
+		Depth:   3,
+	})
 	agentReg := orchestrator.NewRegistry()
 	for _, ac := range cfg.AgentRoles {
 		if !ac.Enabled {
