@@ -37,3 +37,6 @@ agent5
 
 _codewhale_src
 
+
+# Build output
+*.exe

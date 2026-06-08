@@ -109,7 +109,7 @@ func NewApp() *App {
 	chatFlex.AddItem(a.chatPanel, 0, 1, false)
 	a.commandPalette = NewCommandPalette()
 	a.suggestionMenu = suggestion.New()
-	chatFlex.AddItem(a.suggestionMenu, 0, 0, false) // hidden by default
+	chatFlex.AddItem(a.suggestionMenu, 1, 0, false) // minimum 1 row for clearing
 	chatFlex.AddItem(a.composer, 3, 0, true)
 	chatFlex.AddItem(a.tabDock, 1, 0, false)
 	a.chatFlex = chatFlex
@@ -524,6 +524,7 @@ func (a *App) closeSession() {
 		a.activeSession = len(a.sessions) - 1
 	}
 	a.chatPanel.SetSession(a.sessions[a.activeSession])
+	a.SetFocus(a.composer)
 }
 
 func (a *App) renameSession() {
@@ -557,6 +558,7 @@ func (a *App) switchToSession(idx int) {
 	a.tabDock.SetActive(idx)
 	a.chatPanel.SetSession(a.sessions[idx])
 	a.composer.ClearInput()
+	a.SetFocus(a.composer)
 }
 
 func (a *App) activeSessionPtr() *Session {
@@ -746,7 +748,7 @@ func (a *App) showSuggestions() {
 
 func (a *App) hideSuggestions() {
 	a.suggestionMenu.Hide()
-	a.chatFlex.ResizeItem(a.suggestionMenu, 0, 0)
+	a.chatFlex.ResizeItem(a.suggestionMenu, 1, 0)
 }
 
 func (a *App) AddWelcomeMessage() {

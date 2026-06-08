@@ -41,6 +41,14 @@ func New() *SuggestionMenu {
 }
 
 func (m *SuggestionMenu) drawList(screen tcell.Screen, x, y, width, height int) (int, int, int, int) {
+	if !m.visible || len(m.filtered) == 0 {
+		for row := y; row < y+height; row++ {
+			for col := x; col < x+width; col++ {
+				screen.SetContent(col, row, ' ', nil, tcell.StyleDefault)
+			}
+		}
+		return x, y, width, height
+	}
 	nameColWidth := width * 40 / 100
 	if nameColWidth > 20 {
 		nameColWidth = 20
