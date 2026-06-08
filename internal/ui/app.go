@@ -28,6 +28,7 @@ const (
 	ModeHelp
 	ModeCommandPalette
 	ModeRename
+	ModeSkill
 )
 
 type App struct {
@@ -60,6 +61,7 @@ type App struct {
 	renameInput     *tview.InputField
 	renamePage      *tview.Flex
 	approvalModal   *ApprovalModal
+	skillOverlay    *SkillOverlay
 	orch            *orchestrator.Orchestrator
 }
 
@@ -167,6 +169,18 @@ func NewApp() *App {
 	// Approval overlay page
 	a.approvalModal = NewApprovalModal()
 	a.pages.AddPage("approval", a.approvalModal, true, false)
+
+	// Skill overlay page
+	a.skillOverlay = NewSkillOverlay(a)
+	skillFlex := tview.NewFlex().SetDirection(tview.FlexColumn)
+	skillFlex.AddItem(nil, 0, 1, false)
+	skillInner := tview.NewFlex().SetDirection(tview.FlexRow)
+	skillInner.AddItem(nil, 0, 1, false)
+	skillInner.AddItem(a.skillOverlay, 0, 3, true)
+	skillInner.AddItem(nil, 0, 1, false)
+	skillFlex.AddItem(skillInner, 80, 0, true)
+	skillFlex.AddItem(nil, 0, 1, false)
+	a.pages.AddPage("skill", skillFlex, true, false)
 
 	// Register builtin commands
 	a.registerBuiltinCommands()
@@ -287,6 +301,13 @@ func (a *App) handleInput(event *tcell.EventKey) *tcell.EventKey {
 			return nil
 		}
 		return event
+	case ModeSkill:
+		if event.Key() == tcell.KeyCtrlS {
+			a.exitSkillOverlay()
+			return nil
+		}
+		// Handled by SkillOverlay's own InputCapture
+		return nil
 	}
 
 	// Chat mode — global shortcuts only here
@@ -304,6 +325,9 @@ func (a *App) handleInput(event *tcell.EventKey) *tcell.EventKey {
 		return nil
 	case event.Key() == tcell.KeyF1 || event.Key() == tcell.KeyCtrlO:
 		a.enterHelp()
+		return nil
+	case event.Key() == tcell.KeyCtrlS:
+		a.enterSkillOverlay()
 		return nil
 	case event.Key() == tcell.KeyCtrlP:
 		a.enterCommandPalette(ShowAll)
@@ -910,6 +934,19 @@ func (a *App) enterCommandPalette(mode PaletteMode) {
 }
 
 func (a *App) exitCommandPalette() {
+	a.mode = ModeChat
+	a.pages.SwitchToPage("chat")
+	a.SetFocus(a.composer)
+}
+
+func (a *App) enterSkillOverlay() {
+	a.mode = ModeSkill
+	a.skillOverlay.LoadSkills()
+	a.pages.SwitchToPage("skill")
+	a.SetFocus(a.skillOverlay)
+}
+
+func (a *App) exitSkillOverlay() {
 	a.mode = ModeChat
 	a.pages.SwitchToPage("chat")
 	a.SetFocus(a.composer)
