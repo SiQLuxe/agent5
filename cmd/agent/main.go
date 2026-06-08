@@ -15,6 +15,7 @@ import (
 	"github.com/example/agent-tui/internal/agent/save"
 	"github.com/example/agent-tui/internal/agent/session"
 	"github.com/example/agent-tui/internal/agent/tool"
+	"github.com/example/agent-tui/internal/agent/tool/search"
 	"github.com/example/agent-tui/internal/backend"
 	_ "github.com/example/agent-tui/internal/backend/opencode"
 	"github.com/example/agent-tui/internal/data/config"
@@ -177,6 +178,23 @@ func main() {
 	if aiClient != nil {
 		toolReg.Register(&tool.ChatLLMTool{Provider: &aiLLMProvider{client: aiClient}})
 	}
+
+	// Build web search provider chain (priority: Tavily > Bing > SearXNG > DuckDuckGo)
+	var searchProviders []search.WebSearchProvider
+	if cfg.WebSearch.TavilyAPIKey != "" {
+		searchProviders = append(searchProviders, search.NewTavilyProvider(cfg.WebSearch.TavilyAPIKey))
+	}
+	if cfg.WebSearch.BingAPIKey != "" {
+		searchProviders = append(searchProviders, search.NewBingProvider(cfg.WebSearch.BingAPIKey))
+	}
+	if cfg.WebSearch.SearXNGUrl != "" {
+		searchProviders = append(searchProviders, search.NewSearXNGProvider(cfg.WebSearch.SearXNGUrl))
+	}
+	searchProviders = append(searchProviders, search.NewDuckDuckGoProvider())
+	searchProvider := search.NewChainProvider(searchProviders...)
+	toolReg.Register(tool.NewWebSearchTool(searchProvider))
+	toolReg.Register(tool.NewWebFetchTool())
+
 	subagentMgr := tool.NewSubagentManager(cfg.MaxSubagents)
 
 	skillRegistry := service.NewSkillRegistry()

@@ -31,3 +31,10 @@ system_prompt = "You are a Go developer. Analyze requirements, write clean code,
 tools = ["read_file", "write_file", "search_text", "exec_command", "chat_llm"]
 max_react_loop = 10
 sandbox_dir = "/tmp/agent-tui/sandbox"  # all file operations restricted to this directory (outside project)
+
+[web_search]
+max_results = 5
+request_timeout = 10
+# tavily_api_key = ""
+# bing_api_key = ""
+# searxng_url = "http://localhost:8888"
