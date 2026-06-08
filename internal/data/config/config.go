@@ -25,6 +25,14 @@ type UIConfig struct {
 	MaxVisibleLines int `toml:"max_visible_lines"`
 }
 
+type WebSearchConfig struct {
+	MaxResults     int    `toml:"max_results"`
+	RequestTimeout int    `toml:"request_timeout"`
+	TavilyAPIKey   string `toml:"tavily_api_key"`
+	BingAPIKey     string `toml:"bing_api_key"`
+	SearXNGUrl     string `toml:"searxng_url"`
+}
+
 type AgentBackendConfig struct {
 	Type      string `toml:"type"`
 	Enabled   bool   `toml:"enabled"`
@@ -57,6 +65,7 @@ type Config struct {
 	UI            UIConfig            `toml:"ui"`
 	Agent         AgentConfig         `toml:"agent"`
 	AgentRoles    []AgentRoleConfig   `toml:"agent_role"`
+	WebSearch     WebSearchConfig     `toml:"web_search"`
 }
 
 func LoadConfig(path string) (*Config, error) {
@@ -102,6 +111,10 @@ func GetDefaultConfig() *Config {
 		MaxSubagents:  3,
 		UI: UIConfig{
 			MaxVisibleLines: 8,
+		},
+		WebSearch: WebSearchConfig{
+			MaxResults:     5,
+			RequestTimeout: 10,
 		},
 		Agent: AgentConfig{
 			Backends: map[string]AgentBackendConfig{

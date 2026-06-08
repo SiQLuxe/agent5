@@ -5,6 +5,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/BurntSushi/toml"
 )
 
 func TestGetDefaultConfig(t *testing.T) {
@@ -45,6 +47,36 @@ func TestConfigStructure(t *testing.T) {
 	}
 	if cfg.Models.OpenAI.DefaultModel != "gpt-4" {
 		t.Errorf("unexpected openai default model: %s", cfg.Models.OpenAI.DefaultModel)
+	}
+}
+
+func TestWebSearchConfig(t *testing.T) {
+	tomlData := `
+[web_search]
+max_results = 3
+request_timeout = 15
+tavily_api_key = "test-key"
+bing_api_key = "bing-key"
+searxng_url = "http://searx:8888"
+`
+	var cfg Config
+	if _, err := toml.Decode(tomlData, &cfg); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if cfg.WebSearch.MaxResults != 3 {
+		t.Fatalf("expected 3, got %d", cfg.WebSearch.MaxResults)
+	}
+	if cfg.WebSearch.TavilyAPIKey != "test-key" {
+		t.Fatalf("expected test-key, got %q", cfg.WebSearch.TavilyAPIKey)
+	}
+	if cfg.WebSearch.SearXNGUrl != "http://searx:8888" {
+		t.Fatalf("expected http://searx:8888, got %q", cfg.WebSearch.SearXNGUrl)
+	}
+	if cfg.WebSearch.RequestTimeout != 15 {
+		t.Fatalf("expected 15, got %d", cfg.WebSearch.RequestTimeout)
+	}
+	if cfg.WebSearch.BingAPIKey != "bing-key" {
+		t.Fatalf("expected bing-key, got %q", cfg.WebSearch.BingAPIKey)
 	}
 }
 
