@@ -1,7 +1,6 @@
 package ui
 
 import (
-	"strings"
 	"testing"
 
 	"github.com/gdamore/tcell/v2"
@@ -739,7 +738,7 @@ func TestSlashFiltering(t *testing.T) {
 	}
 }
 
-func TestSlashEnterFillsCommand(t *testing.T) {
+func TestSlashEnterExecutesBuiltin(t *testing.T) {
 	a := NewApp()
 	a.onComposerChange("/Se")
 	ev := tcell.NewEventKey(tcell.KeyEnter, 0, tcell.ModNone)
@@ -747,9 +746,25 @@ func TestSlashEnterFillsCommand(t *testing.T) {
 	if result != nil {
 		t.Fatal("expected Enter consumed (nil)")
 	}
-	input := a.composer.GetInput()
-	if !strings.HasPrefix(input, "/") || !strings.HasSuffix(input, " ") {
-		t.Fatalf("expected composer to contain '/<cmd> ', got %q", input)
+	if a.suggestionMenu.Visible() {
+		t.Fatal("expected menu hidden after execute")
+	}
+}
+
+func TestSlashEnterFillsSkillCommand(t *testing.T) {
+	a := NewApp()
+	cr := service.NewCommandRegistry()
+	cr.Register(&service.Command{
+		Name: "test-skill", Description: "test",
+		Category: service.CmdSkill,
+		Action:   func(string) {},
+	})
+	a.commandRegistry = cr
+	a.onComposerChange("/test")
+	ev := tcell.NewEventKey(tcell.KeyEnter, 0, tcell.ModNone)
+	result := a.handleInput(ev)
+	if result != nil {
+		t.Fatal("expected Enter consumed (nil)")
 	}
 	if a.suggestionMenu.Visible() {
 		t.Fatal("expected menu hidden after fill")

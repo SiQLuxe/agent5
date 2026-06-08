@@ -311,11 +311,13 @@ func (a *App) handleInput(event *tcell.EventKey) *tcell.EventKey {
 	case event.Key() == tcell.KeyEnter && event.Modifiers() == tcell.ModNone:
 		if a.suggestionMenu.Visible() {
 			cmd := a.suggestionMenu.Selected()
-			if cmd != nil {
-				a.composer.SetInput("/" + cmd.Name + " ")
+			if cmd != nil && cmd.Action != nil && cmd.Category == service.CmdBuiltin {
+				cmd.Action(cmd.Name)
+				a.composer.ClearInput()
 				a.hideSuggestions()
+				return nil
 			}
-			return nil
+			a.hideSuggestions()
 		}
 		if a.isLoading {
 			return nil
@@ -593,6 +595,7 @@ func (a *App) sendMessage() {
 			s.Messages[len(s.Messages)-1].Label = pc.Name
 		}
 		a.composer.ClearInput()
+		a.chatPanel.SetSession(s)
 		return
 	}
 
