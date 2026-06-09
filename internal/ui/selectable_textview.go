@@ -30,8 +30,9 @@ type SelectableTextView struct {
 	selectEndCol     int
 	selectionVisible bool
 
-	highlights   []string
-	scrollOffset int
+	highlights         []string
+	scrollOffset       int
+	lastRenderedOffset int
 }
 
 func NewSelectableTextView() *SelectableTextView {
@@ -154,6 +155,13 @@ func (t *SelectableTextView) GetSelection() string {
 	return sel.String()
 }
 
+func (t *SelectableTextView) CopySelection() {
+	if t.HasSelection() {
+		t.copyToClipboard(t.GetSelection())
+		t.ClearSelection()
+	}
+}
+
 func (t *SelectableTextView) ClearSelection() *SelectableTextView {
 	t.selecting = false
 	t.selectionVisible = false
@@ -212,7 +220,7 @@ func (t *SelectableTextView) ScrollToEnd() *SelectableTextView {
 
 func (t *SelectableTextView) GetScrollOffset() (row, column int) {
 	if t.scrollOffset < 0 {
-		return 0, 0
+		return t.lastRenderedOffset, 0
 	}
 	return t.scrollOffset, 0
 }
@@ -246,7 +254,7 @@ func (t *SelectableTextView) MouseHandler() func(action tview.MouseAction, event
 		case tview.MouseLeftDown:
 			setFocus(t)
 			innerX, innerY, _, _ := t.Box.GetInnerRect()
-			line := y - innerY
+			line := y - innerY + t.lastRenderedOffset
 			col := x - innerX
 			if line >= 0 && col >= 0 {
 				t.handleMousePress(line, col)
@@ -255,7 +263,7 @@ func (t *SelectableTextView) MouseHandler() func(action tview.MouseAction, event
 		case tview.MouseMove:
 			if t.selecting {
 				innerX, innerY, _, _ := t.Box.GetInnerRect()
-				line := y - innerY
+				line := y - innerY + t.lastRenderedOffset
 				col := x - innerX
 				if line >= 0 && col >= 0 {
 					t.handleMouseDrag(line, col)
@@ -274,10 +282,7 @@ func (t *SelectableTextView) InputHandler() func(event *tcell.EventKey, setFocus
 	return t.WrapInputHandler(func(event *tcell.EventKey, setFocus func(p tview.Primitive)) {
 		switch event.Key() {
 		case tcell.KeyCtrlC, tcell.KeyCtrlQ:
-			if t.HasSelection() {
-				t.copyToClipboard(t.GetSelection())
-				t.ClearSelection()
-			}
+			t.CopySelection()
 		case tcell.KeyCtrlA:
 			t.SelectAll()
 		case tcell.KeyEscape:
@@ -313,8 +318,18 @@ func (t *SelectableTextView) Draw(screen tcell.Screen) {
 	cells := t.parseCells(width)
 	defaultStyle := tcell.StyleDefault.Background(t.GetBackgroundColor())
 
-	for lineIdx := 0; lineIdx < len(cells) && lineIdx < height; lineIdx++ {
-		line := cells[lineIdx]
+	startLine := t.scrollOffset
+	if startLine < 0 || startLine > len(cells)-height {
+		startLine = len(cells) - height
+	}
+	if startLine < 0 {
+		startLine = 0
+	}
+	t.lastRenderedOffset = startLine
+
+	for lineIdx := 0; lineIdx < height && startLine+lineIdx < len(cells); lineIdx++ {
+		absLine := startLine + lineIdx
+		line := cells[absLine]
 		drawX := x
 		for col := 0; col < len(line) && drawX < x+width; col++ {
 			cell := line[col]
@@ -322,7 +337,7 @@ func (t *SelectableTextView) Draw(screen tcell.Screen) {
 			if cellStyle == (tcell.Style{}) {
 				cellStyle = defaultStyle
 			}
-			if t.selectionVisible && t.isInSelection(lineIdx, col) {
+			if t.selectionVisible && t.isInSelection(absLine, col) {
 				cellStyle = cellStyle.Reverse(true)
 			}
 			screen.SetContent(drawX, y+lineIdx, cell.ch, nil, cellStyle)

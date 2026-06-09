@@ -822,3 +822,40 @@ func TestSlashIncludesBuiltins(t *testing.T) {
 		t.Fatal("expected 'New Session' builtin in suggestion results")
 	}
 }
+
+func TestCtrlC_CopiesSelectionInsteadOfQuitting(t *testing.T) {
+	a := NewApp()
+	a.chatPanel.SetText("hello world")
+	a.chatPanel.SelectAll()
+
+	if !a.chatPanel.HasSelection() {
+		t.Fatal("expected selection before Ctrl+C")
+	}
+
+	ev := tcell.NewEventKey(tcell.KeyCtrlC, 'c', tcell.ModCtrl)
+	result := a.handleInput(ev)
+
+	if result != nil {
+		t.Fatal("expected Ctrl+C consumed (nil) when selection exists")
+	}
+	if a.chatPanel.HasSelection() {
+		t.Fatal("expected selection cleared after copy")
+	}
+}
+
+func TestCtrlC_QuitsWhenNoSelection(t *testing.T) {
+	a := NewApp()
+	a.chatPanel.SetText("hello world")
+	a.chatPanel.ClearSelection()
+
+	if a.chatPanel.HasSelection() {
+		t.Fatal("expected no selection before Ctrl+C")
+	}
+
+	ev := tcell.NewEventKey(tcell.KeyCtrlC, 'c', tcell.ModCtrl)
+	result := a.handleInput(ev)
+
+	if result != nil {
+		t.Fatal("expected Ctrl+C consumed (nil) when no selection")
+	}
+}

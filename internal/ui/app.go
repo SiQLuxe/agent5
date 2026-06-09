@@ -111,7 +111,7 @@ func NewApp() *App {
 	chatFlex.AddItem(a.chatPanel, 0, 1, false)
 	a.commandPalette = NewCommandPalette()
 	a.suggestionMenu = suggestion.New()
-	chatFlex.AddItem(a.suggestionMenu, 1, 0, false) // minimum 1 row for clearing
+	chatFlex.AddItem(a.suggestionMenu, 1, 0, false)
 	chatFlex.AddItem(a.composer, 3, 0, true)
 	chatFlex.AddItem(a.tabDock, 1, 0, false)
 	a.chatFlex = chatFlex
@@ -318,6 +318,10 @@ func (a *App) handleInput(event *tcell.EventKey) *tcell.EventKey {
 			return nil
 		}
 	case event.Key() == tcell.KeyCtrlC:
+		if a.chatPanel.HasSelection() {
+			a.chatPanel.CopySelection()
+			return nil
+		}
 		a.Stop()
 		return nil
 	case event.Key() == tcell.KeyCtrlF:
@@ -509,6 +513,7 @@ func (a *App) exitSearch() {
 	a.pages.SwitchToPage("chat")
 	a.SetFocus(a.composer)
 	a.chatPanel.ExitSearch()
+	a.onComposerChange(a.composer.GetInput())
 }
 
 func (a *App) enterHelp() {
@@ -522,6 +527,7 @@ func (a *App) exitHelp() {
 	a.mode = ModeChat
 	a.pages.SwitchToPage("chat")
 	a.SetFocus(a.composer)
+	a.onComposerChange(a.composer.GetInput())
 }
 
 // Session management
@@ -772,7 +778,7 @@ func (a *App) showSuggestions() {
 
 func (a *App) hideSuggestions() {
 	a.suggestionMenu.Hide()
-	a.chatFlex.ResizeItem(a.suggestionMenu, 1, 0)
+	a.chatFlex.ResizeItem(a.suggestionMenu, 0, 0)
 }
 
 func (a *App) AddWelcomeMessage() {
@@ -937,6 +943,7 @@ func (a *App) exitCommandPalette() {
 	a.mode = ModeChat
 	a.pages.SwitchToPage("chat")
 	a.SetFocus(a.composer)
+	a.onComposerChange(a.composer.GetInput())
 }
 
 func (a *App) enterSkillOverlay() {
@@ -950,6 +957,7 @@ func (a *App) exitSkillOverlay() {
 	a.mode = ModeChat
 	a.pages.SwitchToPage("chat")
 	a.SetFocus(a.composer)
+	a.onComposerChange(a.composer.GetInput())
 }
 
 func (a *App) executeCommand(cmd *service.Command) {
@@ -1023,6 +1031,7 @@ func (a *App) exitRename() {
 	a.mode = ModeChat
 	a.pages.SwitchToPage("chat")
 	a.SetFocus(a.composer)
+	a.onComposerChange(a.composer.GetInput())
 }
 
 func (a *App) reloadSkills() {
