@@ -14,13 +14,13 @@ const maxVisibleItems = 8
 
 type SuggestionMenu struct {
 	*tview.Flex
-	items       []*service.Command
-	filtered    []*service.Command
-	filterText  string
-	selected    int
+	items        []*service.Command
+	filtered     []*service.Command
+	filterText   string
+	selected     int
 	scrollOffset int
-	list        *tview.Box
-	visible     bool
+	list         *tview.Box
+	visible      bool
 }
 
 func New() *SuggestionMenu {
@@ -42,13 +42,15 @@ func New() *SuggestionMenu {
 
 func (m *SuggestionMenu) drawList(screen tcell.Screen, x, y, width, height int) (int, int, int, int) {
 	if !m.visible || len(m.filtered) == 0 {
+		clearStyle := tcell.StyleDefault.Foreground(tcell.ColorWhite).Background(tcell.ColorBlack)
 		for row := y; row < y+height; row++ {
 			for col := x; col < x+width; col++ {
-				screen.SetContent(col, row, ' ', nil, tcell.StyleDefault)
+				screen.SetContent(col, row, ' ', nil, clearStyle)
 			}
 		}
 		return x, y, width, height
 	}
+
 	nameColWidth := width * 40 / 100
 	if nameColWidth > 20 {
 		nameColWidth = 20
@@ -66,12 +68,10 @@ func (m *SuggestionMenu) drawList(screen tcell.Screen, x, y, width, height int) 
 		cmd := m.filtered[idx]
 		rowY := y + idx - m.scrollOffset
 
-		bg := tcell.ColorDefault
-		fg := tcell.ColorWhite
+		style := tcell.StyleDefault.Foreground(tcell.ColorWhite)
 		if idx == m.selected {
-			bg = tcell.ColorOrange
+			style = tcell.StyleDefault.Reverse(true)
 		}
-		style := tcell.StyleDefault.Background(bg).Foreground(fg)
 
 		name := cmd.Name
 		if runewidth.StringWidth(name) > nameColWidth {
@@ -82,7 +82,7 @@ func (m *SuggestionMenu) drawList(screen tcell.Screen, x, y, width, height int) 
 
 		screen.SetContent(x+nameColWidth, rowY, ' ', nil, style)
 
-		descStyle := tcell.StyleDefault.Background(bg).Foreground(tcell.ColorGray)
+		descStyle := tcell.StyleDefault.Foreground(tcell.ColorGray)
 		if idx == m.selected {
 			descStyle = style
 		}

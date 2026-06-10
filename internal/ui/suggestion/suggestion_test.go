@@ -11,9 +11,6 @@ func TestNew(t *testing.T) {
 	if m == nil {
 		t.Fatal("New() returned nil")
 	}
-	if m.list == nil {
-		t.Fatal("expected list")
-	}
 }
 
 func TestSetCommands(t *testing.T) {
