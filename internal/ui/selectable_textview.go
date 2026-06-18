@@ -357,7 +357,7 @@ func (t *SelectableTextView) parseCells(width int) [][]cellInfo {
 }
 
 type styleState struct {
-	fg, bg                           tcell.Color
+	fg, bg                          tcell.Color
 	bold, underline, reverse, blink bool
 }
 
