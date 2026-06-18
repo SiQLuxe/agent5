@@ -252,7 +252,9 @@ func (t *SelectableTextView) MouseHandler() func(action tview.MouseAction, event
 		x, y := event.Position()
 		switch action {
 		case tview.MouseLeftDown:
-			setFocus(t)
+			// Do not call setFocus here. The chat panel is read-only and
+			// keyboard input must remain on the composer. Stealing focus
+			// breaks typing after any mouse click in the chat area.
 			innerX, innerY, _, _ := t.Box.GetInnerRect()
 			line := y - innerY + t.lastRenderedOffset
 			col := x - innerX

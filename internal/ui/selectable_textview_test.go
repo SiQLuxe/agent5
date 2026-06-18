@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/gdamore/tcell/v2"
+	"github.com/rivo/tview"
 )
 
 func TestSelectableTextView_RendersText(t *testing.T) {
@@ -302,6 +303,29 @@ func TestSelectableTextView_MouseHandler(t *testing.T) {
 	sel := tv.GetSelection()
 	if len(sel) == 0 {
 		t.Fatal("expected non-empty selection")
+	}
+}
+
+// Regression: mouse click on chat panel must NOT steal focus from composer.
+// Otherwise after clicking the chat area (e.g. after creating a new session)
+// keyboard input no longer reaches the composer.
+func TestSelectableTextView_MouseLeftDownDoesNotStealFocus(t *testing.T) {
+	tv := NewSelectableTextView()
+	tv.SetRect(0, 0, 20, 5)
+	tv.SetText("hello world")
+
+	var focused tview.Primitive
+	setFocus := func(p tview.Primitive) { focused = p }
+
+	handler := tv.MouseHandler()
+	if handler == nil {
+		t.Fatal("expected non-nil mouse handler")
+	}
+	ev := tcell.NewEventMouse(2, 1, tcell.Button1, tcell.ModNone)
+	handler(tview.MouseLeftDown, ev, setFocus)
+
+	if focused != nil {
+		t.Fatalf("expected setFocus NOT to be called on MouseLeftDown, but was called with %T", focused)
 	}
 }
 
