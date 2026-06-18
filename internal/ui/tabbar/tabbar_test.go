@@ -100,12 +100,4 @@ func TestSetColors(t *testing.T) {
 	tb.SetColors(tcell.ColorWhite, tcell.ColorBlue, tcell.ColorGray, tcell.ColorDefault)
 }
 
-func TestTabAtX(t *testing.T) {
-	tb := New()
-	tb.AddTab(Tab{ID: "1", Label: "A"})
-	tb.AddTab(Tab{ID: "2", Label: "B"})
-	idx := tb.tabAtX(0, 20)
-	if idx != 0 {
-		t.Fatalf("expected tab index 0 at x=0, got %d", idx)
-	}
-}
+

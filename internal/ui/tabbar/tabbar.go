@@ -19,7 +19,6 @@ type TabDock struct {
 	activeBg   tcell.Color
 	inactiveFg tcell.Color
 	inactiveBg tcell.Color
-	onClick    func(idx int)
 }
 
 func New() *TabDock {
@@ -75,46 +74,6 @@ func (t *TabDock) TabCount() int {
 	return len(t.tabs)
 }
 
-func (t *TabDock) SetOnClick(fn func(idx int)) {
-	t.onClick = fn
-	t.SetMouseCapture(func(action tview.MouseAction, event *tcell.EventMouse) (tview.MouseAction, *tcell.EventMouse) {
-		if action == tview.MouseLeftClick && t.onClick != nil {
-			x, _ := event.Position()
-			_, _, w, _ := t.GetRect()
-			idx := t.tabAtX(x, w)
-			if idx >= 0 {
-				t.onClick(idx)
-				return action, nil
-			}
-			return action, nil
-		}
-		return action, event
-	})
-}
-
-func (t *TabDock) tabAtX(x, width int) int {
-	if len(t.tabs) == 0 || width <= 0 {
-		return -1
-	}
-	labelTotal := 0
-	for _, tab := range t.tabs {
-		labelTotal += len(tab.Label) + 4
-	}
-	remaining := width - labelTotal
-	extraPerTab := 0
-	if len(t.tabs) > 0 && remaining > 0 {
-		extraPerTab = remaining / len(t.tabs)
-	}
-	cx := 0
-	for i, tab := range t.tabs {
-		tabW := len(tab.Label) + 4 + extraPerTab
-		if x >= cx && x < cx+tabW {
-			return i
-		}
-		cx += tabW
-	}
-	return -1
-}
 
 func (t *TabDock) SetColors(activeFg, activeBg, inactiveFg, inactiveBg tcell.Color) {
 	t.activeFg = activeFg

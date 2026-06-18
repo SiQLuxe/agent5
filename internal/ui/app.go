@@ -83,11 +83,6 @@ func NewApp() *App {
 		themeService:  NewThemeService(nil),
 	}
 
-	// Wire tab click
-	a.tabDock.SetOnClick(func(idx int) {
-		a.switchToSession(idx)
-	})
-
 	// Setup search input
 	a.searchInput.SetChangedFunc(func(text string) {
 		a.chatPanel.SetSearchQuery(text)
