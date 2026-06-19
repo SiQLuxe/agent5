@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"strings"
 	"testing"
 	"time"
 
@@ -946,4 +947,22 @@ func TestCtrlC_WithSelectionDoesNotArmQuit(t *testing.T) {
 	if !a.lastCtrlCAt.IsZero() {
 		t.Fatal("expected lastCtrlCAt to remain zero on copy path")
 	}
+}
+
+func TestCtrlC_DefaultHintBarPathSetsText(t *testing.T) {
+	a := NewApp()
+	// Do NOT inject ctrlCHint — exercise the real hintBar path.
+
+	if got := a.hintBar.GetText(true); got != "" {
+		t.Fatalf("expected empty hintBar before, got %q", got)
+	}
+
+	a.fireCtrlCHint()
+
+	got := a.hintBar.GetText(true)
+	if !strings.Contains(got, "再次按 Ctrl+C 退出") {
+		t.Fatalf("expected hintBar to contain quit prompt, got %q", got)
+	}
+	// We do not wait for the 3s clear-timer goroutine; it would block on
+	// QueueUpdateDraw against an un-Run Application. Process exit reaps it.
 }

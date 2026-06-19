@@ -15,6 +15,7 @@ import (
 	"github.com/example/agent-tui/internal/agent/session"
 	"github.com/example/agent-tui/internal/service"
 	"github.com/example/agent-tui/internal/ui/composer"
+	"github.com/example/agent-tui/internal/ui/hint"
 	"github.com/example/agent-tui/internal/ui/status"
 	"github.com/example/agent-tui/internal/ui/suggestion"
 	"github.com/example/agent-tui/internal/ui/tabbar"
@@ -36,6 +37,7 @@ type App struct {
 	pages        *tview.Pages
 	chatFlex     *tview.Flex
 	statusBar    *status.StatusBar
+	hintBar      *hint.HintBar
 	chatPanel    *ChatPanel
 	composer     *composer.Composer
 	tabDock      *tabbar.TabDock
@@ -74,6 +76,7 @@ func NewApp() *App {
 		Application:   tview.NewApplication(),
 		pages:         tview.NewPages(),
 		statusBar:     status.New(),
+		hintBar:       hint.New(),
 		chatPanel:     NewChatPanel(),
 		composer:      composer.New(),
 		tabDock:       tabbar.New(),
@@ -104,7 +107,7 @@ func NewApp() *App {
 	a.helpView.SetTitle(" Help ")
 	a.helpView.SetTextStyle(tcell.StyleDefault.Background(tcell.ColorDefault))
 
-	// Build layout: StatusBar + ChatPanel + Composer + SuggestionBar + TabDock
+	// Build layout: StatusBar + ChatPanel + Composer + SuggestionBar + TabDock + HintBar
 	chatFlex := tview.NewFlex().SetDirection(tview.FlexRow)
 	chatFlex.AddItem(a.statusBar, 1, 0, false)
 	chatFlex.AddItem(a.chatPanel, 0, 1, false)
@@ -113,6 +116,7 @@ func NewApp() *App {
 	chatFlex.AddItem(a.suggestionMenu, 1, 0, false)
 	chatFlex.AddItem(a.composer, 3, 0, true)
 	chatFlex.AddItem(a.tabDock, 1, 0, false)
+	chatFlex.AddItem(a.hintBar, 1, 0, false)
 	a.chatFlex = chatFlex
 
 	// Composer text change handler for command suggestions
@@ -888,12 +892,12 @@ func (a *App) ShowToast(title, message, variant string) {
 
 // fireCtrlCHint shows the "press Ctrl+C again to quit" hint.
 // Routes through ctrlCHint when set (for tests), otherwise updates the
-// status bar synchronously.
+// hint bar synchronously and schedules a clear.
 //
 // IMPORTANT: This is called from inputCapture, which already runs on the
 // tview main event-loop goroutine. We MUST NOT use QueueUpdate /
-// QueueUpdateDraw here — those would post to the same loop and then block
-// waiting for the (same) loop to drain the queue, deadlocking the UI.
+// QueueUpdateDraw for the initial Show — those would post to the same
+// loop and then block waiting for it to drain, deadlocking the UI.
 // tview will redraw automatically after inputCapture returns nil.
 // The clear-after-3s timer runs on its own goroutine, so it CAN safely
 // use QueueUpdateDraw.
@@ -902,11 +906,28 @@ func (a *App) fireCtrlCHint() {
 		a.ctrlCHint()
 		return
 	}
-	a.statusBar.ShowMessage("再次按 Ctrl+C 退出")
+	a.hintBar.Show("再次按 Ctrl+C 退出", hint.LevelInfo)
 	go func() {
 		time.Sleep(3 * time.Second)
 		a.QueueUpdateDraw(func() {
-			a.statusBar.ClearMessage()
+			a.hintBar.Clear()
+		})
+	}()
+}
+
+// ShowHint is a generic entry point for transient bottom-of-screen hints.
+// Safe to call from any goroutine OTHER than the tview main event loop.
+// From inside inputCapture / a primitive's InputHandler, prefer setting
+// a.hintBar directly to avoid the QueueUpdateDraw self-deadlock described
+// on fireCtrlCHint.
+func (a *App) ShowHint(text string, level hint.Level, dur time.Duration) {
+	a.QueueUpdateDraw(func() {
+		a.hintBar.Show(text, level)
+	})
+	go func() {
+		time.Sleep(dur)
+		a.QueueUpdateDraw(func() {
+			a.hintBar.Clear()
 		})
 	}()
 }
