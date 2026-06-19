@@ -63,6 +63,10 @@ type App struct {
 	approvalModal   *ApprovalModal
 	skillOverlay    *SkillOverlay
 	orch            *orchestrator.Orchestrator
+	lastCtrlCAt     time.Time
+	// ctrlCHint shows the "press Ctrl+C again to quit" hint.
+	// Overridable for tests; when nil, ShowToast is used.
+	ctrlCHint func()
 }
 
 func NewApp() *App {
@@ -317,7 +321,12 @@ func (a *App) handleInput(event *tcell.EventKey) *tcell.EventKey {
 			a.chatPanel.CopySelection()
 			return nil
 		}
-		a.Stop()
+		if time.Since(a.lastCtrlCAt) < 2*time.Second {
+			a.Stop()
+			return nil
+		}
+		a.lastCtrlCAt = time.Now()
+		a.fireCtrlCHint()
 		return nil
 	case event.Key() == tcell.KeyCtrlF:
 		a.enterSearch()
@@ -875,6 +884,16 @@ func (a *App) ShowToast(title, message, variant string) {
 			a.statusBar.ClearMessage()
 		})
 	}()
+}
+
+// fireCtrlCHint shows the "press Ctrl+C again to quit" hint.
+// Routes through ctrlCHint when set (for tests), otherwise ShowToast.
+func (a *App) fireCtrlCHint() {
+	if a.ctrlCHint != nil {
+		a.ctrlCHint()
+		return
+	}
+	a.ShowToast("", "再次按 Ctrl+C 退出", "info")
 }
 
 func (a *App) ExecuteCommand(command string) {

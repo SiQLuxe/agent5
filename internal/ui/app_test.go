@@ -2,6 +2,7 @@ package ui
 
 import (
 	"testing"
+	"time"
 
 	"github.com/gdamore/tcell/v2"
 	"github.com/example/agent-tui/internal/ai"
@@ -845,6 +846,7 @@ func TestCtrlC_CopiesSelectionInsteadOfQuitting(t *testing.T) {
 
 func TestCtrlC_QuitsWhenNoSelection(t *testing.T) {
 	a := NewApp()
+	a.ctrlCHint = func() {}
 	a.chatPanel.SetText("hello world")
 	a.chatPanel.ClearSelection()
 
@@ -857,5 +859,91 @@ func TestCtrlC_QuitsWhenNoSelection(t *testing.T) {
 
 	if result != nil {
 		t.Fatal("expected Ctrl+C consumed (nil) when no selection")
+	}
+}
+
+func TestCtrlC_FirstPressWithoutSelectionDoesNotQuit(t *testing.T) {
+	a := NewApp()
+	a.ctrlCHint = func() {}
+	a.chatPanel.ClearSelection()
+
+	if !a.lastCtrlCAt.IsZero() {
+		t.Fatal("expected lastCtrlCAt zero before any Ctrl+C")
+	}
+
+	ev := tcell.NewEventKey(tcell.KeyCtrlC, 'c', tcell.ModCtrl)
+	result := a.handleInput(ev)
+
+	if result != nil {
+		t.Fatal("expected Ctrl+C consumed (nil) on first press")
+	}
+	if a.lastCtrlCAt.IsZero() {
+		t.Fatal("expected lastCtrlCAt set after first Ctrl+C")
+	}
+}
+
+func TestCtrlC_SecondPressWithinWindowQuits(t *testing.T) {
+	a := NewApp()
+	a.ctrlCHint = func() {}
+	a.chatPanel.ClearSelection()
+
+	// Simulate a first press 500ms ago — within the 2s window.
+	a.lastCtrlCAt = time.Now().Add(-500 * time.Millisecond)
+	prev := a.lastCtrlCAt
+
+	ev := tcell.NewEventKey(tcell.KeyCtrlC, 'c', tcell.ModCtrl)
+	result := a.handleInput(ev)
+
+	if result != nil {
+		t.Fatal("expected Ctrl+C consumed (nil) on second press")
+	}
+	// On quit path the timestamp must NOT be re-armed (Stop is invoked instead).
+	if !a.lastCtrlCAt.Equal(prev) {
+		t.Fatal("expected lastCtrlCAt unchanged on quit path")
+	}
+}
+
+func TestCtrlC_SecondPressAfterWindowRearmsPrompt(t *testing.T) {
+	a := NewApp()
+	hintCalls := 0
+	a.ctrlCHint = func() { hintCalls++ }
+	a.chatPanel.ClearSelection()
+
+	// Simulate a first press 5s ago — outside the 2s window.
+	old := time.Now().Add(-5 * time.Second)
+	a.lastCtrlCAt = old
+
+	ev := tcell.NewEventKey(tcell.KeyCtrlC, 'c', tcell.ModCtrl)
+	result := a.handleInput(ev)
+
+	if result != nil {
+		t.Fatal("expected Ctrl+C consumed (nil)")
+	}
+	if !a.lastCtrlCAt.After(old) {
+		t.Fatal("expected lastCtrlCAt re-armed to a newer time after window expired")
+	}
+	if hintCalls != 1 {
+		t.Fatalf("expected hint shown once, got %d", hintCalls)
+	}
+}
+
+func TestCtrlC_WithSelectionDoesNotArmQuit(t *testing.T) {
+	a := NewApp()
+	a.ctrlCHint = func() {}
+	a.chatPanel.SetText("hello world")
+	a.chatPanel.SelectAll()
+
+	if !a.chatPanel.HasSelection() {
+		t.Fatal("expected selection before Ctrl+C")
+	}
+	if !a.lastCtrlCAt.IsZero() {
+		t.Fatal("expected lastCtrlCAt zero before any Ctrl+C")
+	}
+
+	ev := tcell.NewEventKey(tcell.KeyCtrlC, 'c', tcell.ModCtrl)
+	a.handleInput(ev)
+
+	if !a.lastCtrlCAt.IsZero() {
+		t.Fatal("expected lastCtrlCAt to remain zero on copy path")
 	}
 }
