@@ -59,10 +59,12 @@ case event.Key() == tcell.KeyCtrlC:
     return nil
 ```
 
-`fireCtrlCHint` 优先调 `ctrlCHint` 字段（测试注入用），否则走 `ShowToast`。这样测试不会因 `QueueUpdateDraw` 在未启动的 `Application` 上阻塞。
+`fireCtrlCHint` 优先调 `ctrlCHint` 字段（测试注入用），否则**同步**调 `statusBar.ShowMessage`，并在后台 goroutine 启 3s 清除 timer。
+
+⚠️ **不能在 inputCapture 里调 `QueueUpdate` / `QueueUpdateDraw`**：tview 主事件循环是单 goroutine select，inputCapture 已在该 goroutine 运行；再 enqueue 后等 done 会自等自身，导致 UI 死锁。tview 在 inputCapture 返回后会自动 `a.draw()`，无需手动入队。清除 timer 在独立 goroutine，故可安全使用 `QueueUpdateDraw`。
 
 ### 提示渠道
-生产复用现有 `App.ShowToast` → `StatusBar.ShowMessage`，3 秒后自动清除。
+状态栏直接同步显示提示；3 秒后由 timer goroutine 通过 `QueueUpdateDraw` 清除。
 
 提示展示 3 秒 vs 退出窗口 2 秒：用户在 2-3 秒之间看到提示但需要重新触发——可接受，提示是软引导。
 

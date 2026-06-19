@@ -887,13 +887,28 @@ func (a *App) ShowToast(title, message, variant string) {
 }
 
 // fireCtrlCHint shows the "press Ctrl+C again to quit" hint.
-// Routes through ctrlCHint when set (for tests), otherwise ShowToast.
+// Routes through ctrlCHint when set (for tests), otherwise updates the
+// status bar synchronously.
+//
+// IMPORTANT: This is called from inputCapture, which already runs on the
+// tview main event-loop goroutine. We MUST NOT use QueueUpdate /
+// QueueUpdateDraw here — those would post to the same loop and then block
+// waiting for the (same) loop to drain the queue, deadlocking the UI.
+// tview will redraw automatically after inputCapture returns nil.
+// The clear-after-3s timer runs on its own goroutine, so it CAN safely
+// use QueueUpdateDraw.
 func (a *App) fireCtrlCHint() {
 	if a.ctrlCHint != nil {
 		a.ctrlCHint()
 		return
 	}
-	a.ShowToast("", "再次按 Ctrl+C 退出", "info")
+	a.statusBar.ShowMessage("再次按 Ctrl+C 退出")
+	go func() {
+		time.Sleep(3 * time.Second)
+		a.QueueUpdateDraw(func() {
+			a.statusBar.ClearMessage()
+		})
+	}()
 }
 
 func (a *App) ExecuteCommand(command string) {
