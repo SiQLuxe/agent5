@@ -66,6 +66,16 @@ type Config struct {
 	Agent         AgentConfig         `toml:"agent"`
 	AgentRoles    []AgentRoleConfig   `toml:"agent_role"`
 	WebSearch     WebSearchConfig     `toml:"web_search"`
+	Skills        SkillsConfig        `toml:"skills"`
+}
+
+// SkillsConfig configures skill loading directories. Dirs is an ordered
+// list: earlier entries take priority on name conflicts (loaded first,
+// later same-name skills are skipped). ~ and $XDG_CONFIG_HOME are expanded
+// at load time. An empty/absent Dirs falls back to the two-layer default
+// (project-level "skills" + user-level "~/.config/agent-tui/skills").
+type SkillsConfig struct {
+	Dirs []string `toml:"dirs"`
 }
 
 func LoadConfig(path string) (*Config, error) {
@@ -125,7 +135,16 @@ func GetDefaultConfig() *Config {
 				},
 			},
 		},
+		Skills: SkillsConfig{
+			Dirs: []string{"skills", "~/.config/agent-tui/skills"},
+		},
 	}
+}
+
+// DefaultSkillsDirs returns the two-layer default skill search path:
+// project-level "skills" first, then user-level "~/.config/agent-tui/skills".
+func DefaultSkillsDirs() []string {
+	return []string{"skills", "~/.config/agent-tui/skills"}
 }
 
 func applyDefaultSandbox(cfg *Config) {

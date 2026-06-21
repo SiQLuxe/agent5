@@ -198,8 +198,15 @@ func main() {
 	subagentMgr := tool.NewSubagentManager(cfg.MaxSubagents)
 
 	skillRegistry := service.NewSkillRegistry()
-	if err := service.LoadSkillsDir(skillRegistry, "skills"); err != nil {
-		log.Printf("warning: loading skills: %v", err)
+	skillDirs := cfg.Skills.Dirs
+	if len(skillDirs) == 0 {
+		skillDirs = config.DefaultSkillsDirs()
+	}
+	for _, d := range skillDirs {
+		expanded := config.ExpandSkillPath(d)
+		if err := service.LoadSkillsDir(skillRegistry, expanded); err != nil {
+			log.Printf("warning: loading skills from %s: %v", d, err)
+		}
 	}
 	skillExecutor := service.NewSkillExecutor(skillRegistry, sm)
 
@@ -207,7 +214,7 @@ func main() {
 	app.SetSessionManager(sm)
 	app.SetSkillExecutor(skillExecutor)
 	app.SetSkillRegistry(skillRegistry)
-	app.SetSkillsDir("skills")
+	app.SetSkillsDir(config.ExpandSkillPath(skillDirs[0]))
 
 	approvalFn := func(toolName string, params map[string]interface{}, oldContent, newContent string) bool {
 		path, _ := params["path"].(string)

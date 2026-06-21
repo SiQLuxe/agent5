@@ -18,3 +18,9 @@ default_client = "openai"
 theme = "dark"
 approval_mode = "manual"
 max_subagents = 3
+
+# Skill directories. Order = priority (earlier wins on name conflict).
+# Defaults to ["skills", "~/.config/agent-tui/skills"] if omitted.
+# ~ expands to $HOME; ~/.config honors $XDG_CONFIG_HOME.
+[skills]
+# dirs = ["skills", "~/.config/agent-tui/skills"]

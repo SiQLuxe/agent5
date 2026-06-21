@@ -127,3 +127,74 @@ func writeSkill(path, name, desc, body string) error {
 	content := "---\nname: " + name + "\ndescription: " + desc + "\n---\n" + body + "\n"
 	return os.WriteFile(path, []byte(content), 0o644)
 }
+
+// TestLoadSkillsDir_ProjectOverridesUser verifies the two-layer loading
+// order: when the same skill name exists in both a project-level dir and a
+// user-level dir, the one loaded first (project-level) wins.
+func TestLoadSkillsDir_ProjectOverridesUser(t *testing.T) {
+	root := t.TempDir()
+	projectDir := filepath.Join(root, "project", "skills", "shared")
+	userDir := filepath.Join(root, "user", "skills", "shared")
+	if err := os.MkdirAll(projectDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(userDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := writeSkill(filepath.Join(projectDir, "SKILL.md"), "shared", "project version", "PROJECT BODY"); err != nil {
+		t.Fatal(err)
+	}
+	if err := writeSkill(filepath.Join(userDir, "SKILL.md"), "shared", "user version", "USER BODY"); err != nil {
+		t.Fatal(err)
+	}
+
+	r := NewSkillRegistry()
+	// Load project first, then user — project wins.
+	if err := LoadSkillsDir(r, filepath.Join(root, "project", "skills")); err != nil {
+		t.Fatalf("LoadSkillsDir project: %v", err)
+	}
+	if err := LoadSkillsDir(r, filepath.Join(root, "user", "skills")); err != nil {
+		t.Fatalf("LoadSkillsDir user: %v", err)
+	}
+
+	s, ok := r.Get("shared")
+	if !ok {
+		t.Fatal("expected shared skill registered")
+	}
+	if !strings.Contains(s.Prompt, "PROJECT BODY") {
+		t.Fatalf("expected project body to win, got %q", s.Prompt)
+	}
+}
+
+// TestLoadSkillsDir_UserOnlyLoadsWhenAbsentFromProject verifies the user
+// layer is used when the project layer has no such skill.
+func TestLoadSkillsDir_UserOnlyLoadsWhenAbsentFromProject(t *testing.T) {
+	root := t.TempDir()
+	projectDir := filepath.Join(root, "project", "skills")
+	userDir := filepath.Join(root, "user", "skills", "personal")
+	if err := os.MkdirAll(projectDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(userDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := writeSkill(filepath.Join(userDir, "SKILL.md"), "personal", "user only", "USER ONLY BODY"); err != nil {
+		t.Fatal(err)
+	}
+
+	r := NewSkillRegistry()
+	if err := LoadSkillsDir(r, projectDir); err != nil {
+		t.Fatalf("LoadSkillsDir project: %v", err)
+	}
+	if err := LoadSkillsDir(r, filepath.Join(root, "user", "skills")); err != nil {
+		t.Fatalf("LoadSkillsDir user: %v", err)
+	}
+
+	s, ok := r.Get("personal")
+	if !ok {
+		t.Fatal("expected personal skill from user layer")
+	}
+	if !strings.Contains(s.Prompt, "USER ONLY BODY") {
+		t.Fatalf("expected user body, got %q", s.Prompt)
+	}
+}
